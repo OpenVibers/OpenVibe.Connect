@@ -49,9 +49,9 @@ With a person's OpenVibe token as a Bearer (or the session on connect.openvibe.w
 | Call | What |
 |---|---|
 | `GET /api/v1/shares` | your shares, with `connected` |
-| `POST /api/v1/shares` `{ label, port, mode?, named? }` | make one → `201 { share, key }` (the key is in this answer only) |
+| `POST /api/v1/shares` `{ label, port, mode?, named?, expires_in? }` | make one → `201 { share, key }` (the key is in this answer only); `expires_in` (600 s to 30 days) closes it by itself |
 | `GET /api/v1/shares/:id` | one share |
-| `PATCH /api/v1/shares/:id` `{ mode?, named?, port?, note? }` | change it |
+| `PATCH /api/v1/shares/:id` `{ mode?, named?, port?, note?, expires_in? }` | change it; `expires_in: null` keeps it open until you close it |
 | `DELETE /api/v1/shares/:id` | close it (410 from then on) |
 | `POST /api/v1/shares/:id/key` | a new key → `{ share, key }`; the connected computer is disconnected |
 | `GET /api/v1/shares/:id/visits` | who opened it in the last 7 days |

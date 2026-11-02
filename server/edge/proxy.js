@@ -207,6 +207,9 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
             return null;
         }
         if (!share) { sendProblem(req, res, 404, 'no_share', 'No share here', `Nothing is shared at ${parsed.host}.`, { link: { href: config.baseUrl, text: 'What is OpenVibe Connect?' } }); return null; }
+        // Its time is up: closed now, even before the sweep (app.js) marks it.
+        const expired = share.expired || (share.status === 'active' && share.expires_at && Date.parse(share.expires_at) <= now());
+        if (expired) { sendProblem(req, res, 410, 'expired', 'This share has ended', `${share.host} was shared until ${new Date(share.expires_at).toUTCString().replace(' GMT', ' UTC')}, and that time is up.`, { link: { href: config.baseUrl, text: 'What is OpenVibe Connect?' } }); return null; }
         if (share.status !== 'active') { sendProblem(req, res, 410, 'closed', 'This share is closed', `${share.owner_username} closed ${share.host}.`, { link: { href: config.baseUrl, text: 'What is OpenVibe Connect?' } }); return null; }
         return share;
     }

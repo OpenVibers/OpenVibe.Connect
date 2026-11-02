@@ -68,6 +68,19 @@ async function createApp(opts = {}) {
 
     const ctx = { config, s, keys, sso, principal, shares, tunnels, gate, proxy, accountData, accountSend, log };
 
+    /** Shares whose time is up close themselves (CON-6): their computers are disconnected and their lists forgotten. */
+    ctx.expireSweep = async () => {
+        let due = [];
+        try { due = await shares.expireDue(); } catch (err) { log.warn('[OpenVibe.Connect] expiry sweep failed:', err.message); return []; }
+        due.forEach((r) => { tunnels.close(r.id, 4003, 'the share ended'); proxy.forget(r.host); proxy.inspector.forget(r.id); });
+        if (due.length) log.log(`[OpenVibe.Connect] ${due.length} share(s) ended on time`);
+        return due;
+    };
+    if (opts.expirySweep !== false) {
+        ctx.expiryTimer = setInterval(() => { ctx.expireSweep(); }, 30_000);
+        ctx.expiryTimer.unref();
+    }
+
     /** A WebSocket upgrade: a share host goes through the gate; /tunnel on Connect's own host is a computer. */
     ctx.onUpgrade = (req, socket, head) => {
         if (proxy.isShareHost(req.headers.host)) { proxy.upgrade(req, socket, head).catch(() => socket.destroy()); return; }
