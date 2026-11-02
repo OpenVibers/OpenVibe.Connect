@@ -35,7 +35,7 @@
   ],
   "capabilitiesRegistered": false,
   "serviceManifestRegistered": true,
-  "deployed": false,
+  "deployed": true,
   "placeholderInSites": false,
   "seed": "none",
   "features": [],
