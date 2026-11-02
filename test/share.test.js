@@ -50,6 +50,12 @@ async function until(fn, ms = 3000) {
         assert.strictEqual((await t.get('/api/v1/shares', { as: alex, json: { label: 'a--b', port: 80 } })).json().code, 'share.invalid_label');
         assert.strictEqual((await t.get('/api/v1/shares', { as: alex, json: { label: 'agents', port: 80 } })).json().code, 'share.taken');
         assert.strictEqual((await t.get('/api/v1/shares', { as: alex, json: { label: 'x', port: 70000 } })).json().code, 'share.invalid_port');
+        const everyone = await t.get('/api/v1/shares', { as: alex, json: { label: 'open', port: 80, mode: 'signin' } });
+        assert.strictEqual(everyone.status, 403, '"anyone signed in" is staff-only until the abuse check');
+        assert.strictEqual(everyone.json().code, 'share.signin_not_yet');
+        const staff = t.network.addUser('ops', { role: 'admin' });
+        const ok = await t.get('/api/v1/shares', { as: staff, json: { label: 'open', port: 80, mode: 'signin' } });
+        assert.strictEqual(ok.status, 201, ok.text);
     });
 
     await check('the gate: a browser goes to the grant, a script gets 401 with where to sign in', async () => {

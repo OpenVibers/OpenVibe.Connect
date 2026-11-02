@@ -37,7 +37,7 @@ only ever connects to `localhost` on the port you gave it.
 |---|---|
 | `owner` (default) | only you |
 | `named` | you and the OpenVibe usernames you list |
-| `signin` | anyone signed in to OpenVibe |
+| `signin` | anyone signed in to OpenVibe (OpenVibe staff only until the abuse check is in, as with Space's public publishing) |
 
 Public shares (no sign-in) come once the abuse check and openvibe.website's entry in the Public Suffix List are in
 (ADR-057, CON-9 and CON-21). Changing who can open a share signs everyone out of it.
