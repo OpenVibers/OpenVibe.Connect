@@ -190,7 +190,24 @@ function keyBlock(share, key, baseUrl) {
 </section>`;
 }
 
-function sharePage({ share, connected, tunnel = null, visits = [], key = null, baseUrl, notice = null, error = null, staff = false, now = Date.now() }) {
+/** Bytes as a person reads them. */
+function size(n) {
+    const b = Number(n) || 0;
+    return b < 1024 ? `${b} B` : b < 1024 * 1024 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`;
+}
+
+const REQ_ERRORS = { local_refused: 'nothing listening', timeout: 'timed out', visitor_gone: 'visitor left', too_large: 'too large', tunnel_closed: 'dropped', bad_status: 'odd answer', bad_headers: 'odd answer', local_error: 'app stopped' };
+
+/** One request in the inspector (public/js/connect.js draws the same row for new ones). */
+function requestRow(q) {
+    const tone = q.open ? 'open' : q.error && !q.status ? 'err' : q.status >= 500 ? 's5' : q.status >= 400 ? 's4' : q.status >= 300 ? 's3' : 's2';
+    const badge = q.open ? (q.ws ? 'open' : '…') : q.status ? String(q.status) : (REQ_ERRORS[q.error] || q.error || '?');
+    const meta = [q.ms != null ? `${q.ms} ms` : null, q.in ? `${size(q.in)} in` : null, q.out ? `${size(q.out)} out` : null,
+        q.error && q.status ? (REQ_ERRORS[q.error] || q.error) : null, q.who ? `@${q.who}` : null].filter(Boolean).join(' · ');
+    return `<li class="cn-req is-${tone}" data-seq="${esc(q.seq)}"><span class="cn-req-badge">${esc(badge)}</span><code class="cn-req-line"><b>${esc(q.ws ? 'WS' : q.method)}</b> ${esc(q.path)}</code><span class="cn-req-meta">${esc(meta)}</span><time datetime="${esc(q.at)}">${esc(String(q.at).slice(11, 19))}</time></li>`;
+}
+
+function sharePage({ share, connected, tunnel = null, visits = [], requests = [], key = null, baseUrl, notice = null, error = null, staff = false, now = Date.now() }) {
     const closed = share.status !== 'active';
     const state = closed ? 'Closed' : connected ? 'Connected' : 'Not connected';
     const stateText = closed ? `Closed ${ago(share.revoked_at, now)}. The address answers "closed" and stays yours.`
@@ -231,6 +248,10 @@ ${key ? keyBlock(share, key, baseUrl) : ''}
 </dl>
 ${!key && !closed ? `<section class="cn-run"><h2>Connect it</h2><div class="cn-copy"><code id="cn-run">node ov-connect.js --key ovc_… --port ${esc(share.local_port)}</code></div><p class="cn-fine">The key was shown once, when it was made. <a href="${esc(CLIENT_URL(baseUrl))}">Download ov-connect.js</a> (Node 22 or newer).</p></section>` : ''}
 <section aria-labelledby="cn-visits-h"><h2 id="cn-visits-h">Who opened it (7 days)</h2>${visitRows}</section>
+${closed ? '' : `<section class="cn-inspector" aria-labelledby="cn-reqs-h" data-cn-reqs="${esc(share.id)}"><h2 id="cn-reqs-h">Requests</h2>
+<p class="cn-fine">The last 100 through this share, newest first, added as they happen. Kept in memory only, never written down: no headers, no bodies, and query values show as "…".</p>
+<ol class="cn-reqs" data-cn-reqs-list>${requests.map(requestRow).join('')}</ol>
+<p class="cn-empty" data-cn-reqs-empty${requests.length ? ' hidden' : ''}>No requests yet${connected ? '. Open the address and they appear here' : ''}.</p></section>`}
 ${policy}
 ${danger}
 </div>`;
@@ -249,4 +270,4 @@ function message({ title, text, link = null }) {
 
 function notFound() { return message({ title: 'Not found', text: 'There is no page here.', link: { href: '/', label: 'OpenVibe Connect' } }); }
 
-module.exports = { home, sharePage, grantDenied, message, notFound, MODE_TEXT, fmtBytes, ago };
+module.exports = { home, sharePage, grantDenied, message, notFound, MODE_TEXT, fmtBytes, ago, requestRow, size };

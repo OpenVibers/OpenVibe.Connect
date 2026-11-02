@@ -55,6 +55,7 @@ With a person's OpenVibe token as a Bearer (or the session on connect.openvibe.w
 | `DELETE /api/v1/shares/:id` | close it (410 from then on) |
 | `POST /api/v1/shares/:id/key` | a new key → `{ share, key }`; the connected computer is disconnected |
 | `GET /api/v1/shares/:id/visits` | who opened it in the last 7 days |
+| `GET /api/v1/shares/:id/requests` `?after=<seq>` | the last 100 requests through it, newest first (the inspector, below) |
 
 ## How it works
 
@@ -68,6 +69,9 @@ browser ──https──▶ Cloudflare ──▶ nginx ──▶ Connect (5240)
 - `server/edge/frames.js` — the wire format: JSON control messages, binary data frames per stream.
 - `server/edge/gate.js` — the one-time codes and the signed host-only cookie.
 - `server/edge/proxy.js` — a visitor's request on a share host: the gate, then the tunnel, streaming both ways.
+- `server/edge/inspector.js` — the share page's Requests list (CON-8 v0): the last 100 requests per share, in memory
+  only, with the method, the path (query values shown as "…"), status, time, bytes and the visitor's name. No headers,
+  no bodies; a restart forgets them.
 - `public/ov-connect.js` — the client.
 
 The v0 transport is a WebSocket on 443 through Cloudflare (ADR-057's fallback path), so nothing needs a UDP port or a

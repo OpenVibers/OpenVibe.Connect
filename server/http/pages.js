@@ -81,7 +81,7 @@ function createPageRoutes(ctx) {
     async function showShare(req, res, share, extra = {}, status = 200) {
         const tunnel = tunnels.get(share.id);
         const visits = await shares.visits(share.id);
-        return page(req, res, { title: share.host, body: views.sharePage({ share, connected: Boolean(tunnel), tunnel, visits, baseUrl: config.baseUrl, staff: req.viewer.role === 'admin', ...extra }) }, status);
+        return page(req, res, { title: share.host, body: views.sharePage({ share, connected: Boolean(tunnel), tunnel, visits, requests: ctx.proxy ? ctx.proxy.inspector.list(share.id) : [], baseUrl: config.baseUrl, staff: req.viewer.role === 'admin', ...extra }) }, status);
     }
 
     r.get('/shares/:id', async (req, res) => {
@@ -126,6 +126,7 @@ function createPageRoutes(ctx) {
         const closed = await shares.revoke(owner(req), share.id);
         tunnels.close(share.id, 4003, 'share closed');
         proxy.forget(closed.host);
+        proxy.inspector.forget(share.id);
         return showShare(req, res, closed, { notice: 'Closed. The address answers "closed" from now on.' });
     });
 

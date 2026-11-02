@@ -11,6 +11,8 @@
  *   DELETE /shares/:id           close it (the host answers 410 from then on)
  *   POST   /shares/:id/key       a new key → { share, key }; the connected computer is disconnected
  *   GET    /shares/:id/visits    who opened it in the last 7 days
+ *   GET    /shares/:id/requests  the last 100 requests through it, newest first (?after=<seq>: only newer ones);
+ *                                memory only, query values shown as "…" (edge/inspector.js)
  *
  * Errors are application/problem+json with a `code`.
  */
@@ -72,6 +74,7 @@ function createApi(ctx) {
         const closed = await shares.revoke(owner(req), share.id);
         tunnels.close(share.id, 4003, 'share closed');
         proxy.forget(closed.host);
+        proxy.inspector.forget(share.id);
         return res.json({ share: shape(closed) });
     }));
 
@@ -81,6 +84,11 @@ function createApi(ctx) {
         const { share: updated, key } = await shares.rotateKey(owner(req), share.id);
         tunnels.close(share.id, 4003, 'the key was replaced');
         return res.json({ share: shape(updated), key });
+    }));
+
+    r.get('/shares/:id/requests', guard(async (req, res) => {
+        const share = await mine(req, res);
+        return share ? res.json({ requests: proxy.inspector.list(share.id, { after: req.query.after }), keep: proxy.inspector.KEEP }) : undefined;
     }));
 
     r.get('/shares/:id/visits', guard(async (req, res) => {

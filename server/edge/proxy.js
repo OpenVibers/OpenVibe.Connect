@@ -37,6 +37,8 @@ function privateCache(value) {
 }
 
 function createProxy({ config, shares, tunnels, gate, log = console, now = () => Date.now() }) {
+    // The last requests through each share, for its owner's page (CON-8 v0; memory only).
+    const inspector = require('./inspector').createInspector({ now });
     const domain = config.shares.domain;
     const cache = new Map();          // host → { share, at }
     const windows = new Map();        // share id → { start, count }
@@ -231,6 +233,9 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
         if (!admitted) return;
         const { who, tunnel } = admitted;
         visit(share, who);
+        const rec = inspector.begin(share.id, { method: req.method, path: url, who });
+        res.on('finish', () => inspector.end(rec, { status: res.statusCode }));
+        res.on('close', () => inspector.end(rec, { error: res.writableFinished ? null : 'visitor_gone' }));
 
         const port = (tunnel.clientInfo && tunnel.clientInfo.port) || share.local_port;
         let finished = false;
@@ -244,11 +249,13 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
                     tunnel.abort(id, 'bad_status');
                     return sendProblem(req, res, 502, 'bad_response', 'The app answered something odd', 'The app on the other end sent a response OpenVibe Connect cannot pass on.');
                 }
+                rec.status = status;
                 try { res.writeHead(status, responseHeaders(m.headers)); } catch { tunnel.abort(id, 'bad_headers'); res.destroy(); }
                 return undefined;
             },
             onData(buf) {
                 addBytes(share, 'out', buf.length);
+                rec.out += buf.length;
                 if (!res.write(buf)) {
                     tunnel.send({ t: 'pause', id });
                     res.once('drain', () => tunnel.send({ t: 'resume', id }));
@@ -258,6 +265,7 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
             onAbort(m) {
                 finished = true;
                 clearTimeout(headTimer);
+                if (m && m.code) rec.error = String(m.code).slice(0, 40);
                 if (res.headersSent) { res.destroy(); return; }
                 if (m && m.code === 'local_refused') {
                     sendProblem(req, res, 502, 'local_refused', 'Nothing is listening', `${share.owner_username}'s computer is connected, but nothing answered on port ${port}.`);
@@ -273,6 +281,7 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
         headTimer = setTimeout(() => {
             if (res.headersSent || finished) return;
             finished = true;
+            rec.error = 'timeout';
             tunnel.abort(id, 'timeout');
             sendProblem(req, res, 504, 'timeout', 'That took too long', `The app on ${share.owner_username}'s computer did not answer in ${Math.round(config.shares.requestTimeoutMs / 1000)} seconds.`);
         }, config.shares.requestTimeoutMs);
@@ -282,8 +291,9 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
         req.on('data', (chunk) => {
             received += chunk.length;
             addBytes(share, 'in', chunk.length);
+            rec.in += chunk.length;
             if (received > config.shares.maxBodyBytes) {
-                if (!finished) { finished = true; tunnel.abort(id, 'too_large'); sendProblem(req, res, 413, 'too_large', 'Too large', 'That request is larger than a share takes.'); }
+                if (!finished) { finished = true; rec.error = 'too_large'; tunnel.abort(id, 'too_large'); sendProblem(req, res, 413, 'too_large', 'Too large', 'That request is larger than a share takes.'); }
                 req.destroy();
                 return;
             }
@@ -305,6 +315,8 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
         if (!admitted) return;
         const { who, tunnel } = admitted;
         visit(share, who);
+        const rec = inspector.begin(share.id, { method: req.method, path: String(req.url || '/'), who, ws: true });
+        socket.on('close', () => inspector.end(rec));
         const port = (tunnel.clientInfo && tunnel.clientInfo.port) || share.local_port;
 
         const lines = [`${req.method} ${req.url} HTTP/1.1`];
@@ -313,13 +325,17 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
         let opened = false;
         const id = tunnel.open({
             onData(buf) {
+                if (!opened) rec.status = /^HTTP\/1\.[01] (\d{3})/.test(buf.toString('latin1', 0, 16)) ? Number(RegExp.$1) : null;
                 opened = true;
                 addBytes(share, 'out', buf.length);
+                rec.out += buf.length;
                 if (!socket.write(buf)) { tunnel.send({ t: 'pause', id }); socket.once('drain', () => tunnel.send({ t: 'resume', id })); }
             },
             onEnd() { tunnel.release(id); socket.end(); },
             onAbort(m) {
+                if (m && m.code) rec.error = String(m.code).slice(0, 40);
                 if (!opened && m && m.code === 'local_refused') {
+                    rec.status = 502;
                     socket.end(`HTTP/1.1 502 Bad Gateway\r\ncontent-type: text/plain\r\nconnection: close\r\n\r\nNothing answered on port ${port}.`);
                 } else socket.destroy();
             },
@@ -327,9 +343,10 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
             onResume() { socket.resume(); },
         });
         tunnel.send({ t: 'raw', id, head: headText });
-        if (head && head.length) { addBytes(share, 'in', head.length); tunnel.data(id, head); }
+        if (head && head.length) { addBytes(share, 'in', head.length); rec.in += head.length; tunnel.data(id, head); }
         socket.on('data', (chunk) => {
             addBytes(share, 'in', chunk.length);
+            rec.in += chunk.length;
             tunnel.data(id, chunk);
             if (tunnel.congested) { socket.pause(); tunnel.drained().then(() => socket.resume()); }
         });
@@ -342,7 +359,7 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
     /** The grant refused someone: counted on the share page as "turned away". */
     function denied(share, who) { visit(share, who, { denied: true }); }
 
-    return { handle, upgrade, isShareHost, flush, forget, denied, stop, responseHeaders, forwardHeaders };
+    return { handle, upgrade, isShareHost, flush, forget, denied, stop, responseHeaders, forwardHeaders, inspector };
 }
 
 /** Write an HTTP answer straight to an upgrade's socket (the gate's 302/401/404/502 before any tunnel opens). */
