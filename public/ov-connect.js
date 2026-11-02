@@ -25,7 +25,7 @@ const HIGH_WATER = 4 * 1024 * 1024;
 const KIND = { DATA: 1, END: 2 };
 
 function parseArgs(argv) {
-    const o = { key: process.env.OV_CONNECT_KEY || '', port: 0, server: process.env.OV_CONNECT_SERVER || 'wss://connect.openvibe.website/tunnel', quiet: false };
+    const o = { key: process.env.OV_CONNECT_KEY || '', port: 0, server: process.env.OV_CONNECT_SERVER || DEFAULT_SERVER, quiet: false };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--key') o.key = argv[++i] || '';
@@ -71,7 +71,10 @@ function main() {
 /**
  * The client itself (exported for tests): createClient({ key, port, server, quiet, log, localHost }) → { start, stop, onReady }
  */
+const DEFAULT_SERVER = 'wss://connect.openvibe.website/tunnel';
+
 function createClient(opts) {
+    opts = { ...opts, server: opts.server || DEFAULT_SERVER };
     const log = opts.log || ((line) => console.log(line));
     const localHost = opts.localHost || 'localhost';
     let ws = null;
@@ -228,4 +231,4 @@ function createClient(opts) {
 
 if (require.main === module) main();
 
-module.exports = { createClient, parseArgs, encode, VERSION };
+module.exports = { createClient, parseArgs, encode, VERSION, DEFAULT_SERVER };
