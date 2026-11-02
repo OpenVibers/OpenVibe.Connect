@@ -149,6 +149,60 @@ function createPageRoutes(ctx) {
         return res.redirect(303, `${share.url}/__ovc/callback?code=${encodeURIComponent(code)}&next=${encodeURIComponent(next)}`);
     });
 
+    // ── Reports (CON-9 v0): anyone reports a share; staff read them and close a share. ──────────────────────────────
+    const { REPORT_REASONS } = require('../shares');
+    const reportHits = new Map();   // address → times this hour (in memory only; never stored)
+    const overReports = (req) => {
+        const key = String(req.ip || ''), cut = Date.now() - 3600_000;
+        const hits = (reportHits.get(key) || []).filter((t) => t > cut);
+        if (hits.length >= 5) return true;
+        hits.push(Date.now());
+        reportHits.set(key, hits);
+        if (reportHits.size > 10_000) reportHits.delete(reportHits.keys().next().value);
+        return false;
+    };
+    r.get('/report', (req, res) => page(req, res, { title: 'Report a share', body: views.reportForm({ host: String(req.query.host || '').slice(0, 200), reasons: REPORT_REASONS, signedIn: signedIn(req) }) }));
+    r.post('/report', async (req, res) => {
+        const values = { host: req.body.host, reason: req.body.reason, details: req.body.details };
+        const again = (status, error) => page(req, res, { title: 'Report a share', body: views.reportForm({ values, error, reasons: REPORT_REASONS, signedIn: signedIn(req) }) }, status);
+        if (!sameOrigin(req, config.baseUrl)) return again(403, 'Send the report from connect.openvibe.website itself.');
+        if (overReports(req)) return again(429, 'That is a lot of reports in an hour. Try again later, or write to OpenVibe from the Help site.');
+        try {
+            await shares.report({ host: values.host, reason: values.reason, details: values.details, reporter: signedIn(req) ? req.viewer.subject : null });
+        } catch (err) {
+            if (!(err instanceof ShareError)) throw err;
+            return again(err.status || 422, err.message);
+        }
+        return page(req, res, { title: 'Report sent', body: views.message({ title: 'Thank you. The report is in.', text: 'OpenVibe staff read every report. If the share breaks the rules, it is closed and its address says so.', link: { href: '/', label: 'OpenVibe Connect' } }) }, 201);
+    });
+    const staffOnly = (req, res) => {
+        if (!signedIn(req)) { res.redirect(303, loginTo(req.originalUrl)); return false; }
+        if (req.viewer.role !== 'admin') { page(req, res, { title: 'Not found', body: views.notFound() }, 404); return false; }
+        return true;
+    };
+    r.get('/admin/reports', async (req, res) => {
+        if (!staffOnly(req, res)) return undefined;
+        res.set('Cache-Control', 'private, no-store');
+        const notice = req.query.done === 'close' ? 'The share is closed.' : req.query.done === 'dismiss' ? 'Dismissed.' : null;
+        return page(req, res, { title: 'Reports', body: views.reportsAdmin({ reports: await shares.openReports(), reasons: REPORT_REASONS, notice }) });
+    });
+    r.post('/admin/reports/:id/:action', async (req, res) => {
+        if (!staffOnly(req, res)) return undefined;
+        if (!sameOrigin(req, config.baseUrl)) return page(req, res, { title: 'Not from this site', body: views.message({ title: 'That came from somewhere else', text: 'Handle reports on connect.openvibe.website itself.', link: { href: '/admin/reports', label: 'Reports' } }) }, 403);
+        try {
+            const out = await shares.handleReport(owner(req), req.params.id, req.params.action);
+            if (out.action === 'close' && out.share) {
+                tunnels.close(out.share.id, 4003, 'the share was closed after a report');
+                proxy.forget(out.share.host);
+                proxy.inspector.forget(out.share.id);
+            }
+            return res.redirect(303, `/admin/reports?done=${encodeURIComponent(out.action)}`);
+        } catch (err) {
+            if (!(err instanceof ShareError)) throw err;
+            return page(req, res, { title: 'Reports', body: views.message({ title: 'That did not work', text: err.message, link: { href: '/admin/reports', label: 'Reports' } }) }, err.status || 422);
+        }
+    });
+
     r.get('/robots.txt', (req, res) => {
         res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(`User-agent: *\nAllow: /$\nDisallow: /shares\nDisallow: /grant\nDisallow: /auth\nDisallow: /api\n`);
     });

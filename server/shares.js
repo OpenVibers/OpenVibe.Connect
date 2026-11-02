@@ -29,6 +29,15 @@ const USERNAME_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$/;
 // How long a share may stay open by itself (CON-6): 10 minutes to 30 days, or until its owner closes it (null).
 const EXPIRES_MIN = 600;
 const EXPIRES_MAX = 30 * 86400;
+// What a report can be about (CON-9 v0). Copyright goes to the DMCA page too; the form says so.
+const REPORT_REASONS = {
+    phishing: 'It pretends to be someone else to get passwords or payment details',
+    malware: 'It offers harmful files or software',
+    illegal: 'Illegal content',
+    copyright: 'It copies my work',
+    abuse: 'Harassment, threats or spam',
+    other: 'Something else',
+};
 const SIGNIN_NOT_YET = '"Anyone signed in" opens with the abuse check. For now, name the people who may open it.';
 
 const isStaff = (owner) => Boolean(owner && owner.role === 'admin');
@@ -118,6 +127,7 @@ function createShares(s, { config }) {
             updated_at: iso(row.updated_at),
             revoked_at: iso(row.revoked_at),
             expires_at: iso(row.expires_at),
+            closed_reason: row.closed_reason || null,
             // It closed itself: revoked at (or just after) the time it was given.
             expired: row.status === 'revoked' && Boolean(row.expires_at && row.revoked_at && new Date(row.revoked_at) >= new Date(row.expires_at)),
             last_connected_at: iso(row.last_connected_at),
@@ -228,6 +238,45 @@ function createShares(s, { config }) {
         return get(share.id);
     }
 
+    // ── Reports (CON-9 v0) ──────────────────────────────────────────────────────────────────────────────────────
+    /** Anyone reports a share by its address. Returns { id, share }. */
+    async function report({ host, reason, details, reporter = null }) {
+        const parsed = parseHost(String(host || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, ''), domain);
+        const share = parsed ? await byHost(parsed.host) : null;
+        if (!share) throw new ShareError(404, 'share.not_found', 'There is no share at that address. Check it, or paste the whole address.');
+        if (!REPORT_REASONS[reason]) throw new ShareError(422, 'report.invalid_reason', 'Pick what the report is about.');
+        const text = String(details || '').trim().slice(0, 2000);
+        const id = `rpt_${crypto.randomBytes(12).toString('base64url')}`;
+        await db.exec('INSERT INTO share_reports (id, share_id, host, reason, details, reporter_subject) VALUES ($1, $2, $3, $4, $5, $6)',
+            [id, share.id, share.host, reason, text || null, reporter || null]);
+        return { id, share };
+    }
+    /** The open reports, newest first, with their share's owner and state (staff only; the route checks). */
+    async function openReports() {
+        return db.many(`SELECT r.id, r.share_id, r.host, r.reason, r.details, r.created_at, r.reporter_subject IS NOT NULL AS signed_in,
+                               s.owner_username, s.status AS share_status, s.mode,
+                               (SELECT count(*)::int FROM share_reports x WHERE x.share_id = r.share_id AND x.status = 'open') AS open_for_share
+                          FROM share_reports r JOIN shares s ON s.id = r.share_id
+                         WHERE r.status = 'open' ORDER BY r.created_at DESC LIMIT 200`);
+    }
+    /** Staff act on a report: 'close' closes its share (and settles every open report on it); 'dismiss' settles one. */
+    async function handleReport(staff, id, action) {
+        if (!isStaff(staff)) throw new ShareError(403, 'report.staff_only', 'Only OpenVibe staff handle reports.');
+        const r = await db.maybe('SELECT * FROM share_reports WHERE id = $1', [String(id || '')]);
+        if (!r) throw new ShareError(404, 'report.not_found', 'No such report.');
+        if (action === 'close') {
+            await db.exec(`UPDATE shares SET status = 'revoked', revoked_at = now(), updated_at = now(), closed_reason = 'report',
+                                  policy_version = policy_version + 1 WHERE id = $1 AND status = 'active'`, [r.share_id]);
+            await db.exec(`UPDATE share_reports SET status = 'closed_share', handled_by = $2, handled_at = now() WHERE share_id = $1 AND status = 'open'`, [r.share_id, staff.subject]);
+            return { action, share: await get(r.share_id) };
+        }
+        if (action === 'dismiss') {
+            await db.exec(`UPDATE share_reports SET status = 'dismissed', handled_by = $2, handled_at = now() WHERE id = $1 AND status = 'open'`, [r.id, staff.subject]);
+            return { action, share: await get(r.share_id) };
+        }
+        throw new ShareError(422, 'report.invalid_action', 'Close the share or dismiss the report.');
+    }
+
     /** Close every share whose time is up (the sweep in app.js); returns them, so their computers are let go. */
     async function expireDue() {
         return db.many(
@@ -275,7 +324,7 @@ function createShares(s, { config }) {
         return false;
     }
 
-    return { create, list, get, byHost, byKey, setPolicy, rotateKey, revoke, expireDue, touchConnected, flushCounters, visits, allows, view, domain };
+    return { create, list, get, byHost, byKey, setPolicy, rotateKey, revoke, expireDue, report, openReports, handleReport, touchConnected, flushCounters, visits, allows, view, domain };
 }
 
 function iso(v) {
@@ -284,4 +333,4 @@ function iso(v) {
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-module.exports = { createShares, ShareError, isStaff, hostFor, parseHost, handleOf, normalizeNamed, LABEL_RE, MODES, RESERVED_LABELS, sha256 };
+module.exports = { createShares, ShareError, isStaff, REPORT_REASONS, hostFor, parseHost, handleOf, normalizeNamed, LABEL_RE, MODES, RESERVED_LABELS, sha256 };
