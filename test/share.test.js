@@ -93,10 +93,16 @@ async function until(fn, ms = 3000) {
         await t.get(`/api/v1/shares/${other.share.id}`, { as: alex, method: 'DELETE' });
     });
 
-    await check('nothing connected: the visitor is told the computer is not connected', async () => {
+    await check('nothing connected: the visitor is told so, and a browser waits for it (CON-17)', async () => {
         const r = await t.share(made.share.host, '/', { cookie: alexCookie });
-        assert.strictEqual(r.status, 502);
+        assert.strictEqual(r.status, 503);
+        assert.strictEqual(r.headers['retry-after'], '10');
         assert.match(r.text, /computer is not connected/);
+        const page = await t.share(made.share.host, '/', { cookie: alexCookie, headers: { accept: 'text/html' } });
+        assert.strictEqual(page.status, 503);
+        assert.match(page.text, /<meta http-equiv="refresh" content="10">/, 'asks again by itself, with no script');
+        assert.match(page.text, /asks again every 10 seconds and opens the app as soon as the computer is back/);
+        assert.match(page.headers['content-security-policy'], /default-src 'none'/, 'still no script');
     });
 
     await check('the client connects with its key and the share answers from the local app', async () => {
