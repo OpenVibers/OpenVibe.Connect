@@ -254,6 +254,29 @@ async function until(fn, ms = 3000) {
         assert.strictEqual(s.connected, true);
     });
 
+    await check('the inspector (CON-8): the requests through the share, newest first, query values hidden, the owner\'s only', async () => {
+        const r = await t.share(made.share.host, '/hello?token=s3cret-value&page=2', { cookie: alexCookie, headers: { accept: 'application/json' } });
+        assert.strictEqual(r.status, 200);
+        let list = [];
+        await until(async () => { list = (await t.get(`/api/v1/shares/${made.share.id}/requests`, { as: alex })).json().requests; return list[0] && !list[0].open; });
+        const top = list[0];
+        assert.deepStrictEqual([top.method, top.path, top.status, top.who], ['GET', '/hello?token=…&page=…', 200, 'Alex_Dev']);
+        assert.ok(top.ms >= 0 && top.out > 0, JSON.stringify(top));
+        assert.ok(!JSON.stringify(list).includes('s3cret'), 'a query value never reaches the list');
+        assert.ok(list.some((q) => q.ws && q.status === 101), 'the WebSocket is there, with its 101');
+        assert.ok(list.some((q) => q.method === 'POST' && q.in > 0), 'a body counts its bytes in');
+        assert.ok(list.every((q, i) => i === 0 || q.seq < list[i - 1].seq), 'newest first');
+        const newer = (await t.get(`/api/v1/shares/${made.share.id}/requests?after=${top.seq}`, { as: alex })).json().requests;
+        assert.deepStrictEqual(newer, [], 'after= answers only newer ones');
+        const page = await t.get(`/shares/${made.share.id}`, { as: alex });
+        assert.ok(page.text.includes(`data-cn-reqs="${made.share.id}"`));
+        assert.ok(page.text.includes('<b>GET</b> /hello?token=…&amp;page=…'), 'the page lists it');
+        assert.strictEqual((await t.get(`/api/v1/shares/${made.share.id}/requests`, { as: bob })).status, 404, 'nobody else');
+        const dead = (await t.get('/api/v1/shares', { as: alex })).json().shares.find((s) => s.label === 'dead');
+        const refused = (await t.get(`/api/v1/shares/${dead.id}/requests`, { as: alex })).json().requests[0];
+        assert.deepStrictEqual([refused.status, refused.error], [502, 'local_refused'], 'nothing listening is named');
+    });
+
     await check('another person cannot see, change or close someone else\'s share', async () => {
         assert.strictEqual((await t.get(`/api/v1/shares/${made.share.id}`, { as: bob })).status, 404);
         assert.strictEqual((await t.get(`/api/v1/shares/${made.share.id}`, { as: bob, method: 'DELETE' })).status, 404);
