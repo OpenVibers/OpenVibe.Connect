@@ -73,6 +73,27 @@ function modeChoices(current, staff) {
     }).join('');
 }
 
+// How long a share stays open by itself (CON-6), as the forms offer it: seconds → words.
+const CLOSES = [['', 'When you close it'], ['3600', 'In 1 hour'], ['28800', 'In 8 hours'], ['86400', 'In 1 day'], ['604800', 'In 7 days']];
+
+/** When a time to come is, in words: "in 3 hours", "in 2 days", "in 12 minutes". */
+function until(iso, now = Date.now()) {
+    const ms = Date.parse(iso) - now;
+    if (!Number.isFinite(ms)) return '';
+    if (ms <= 0) return 'now';
+    const m = Math.round(ms / 60000);
+    if (m < 60) return `in ${m} minute${m === 1 ? '' : 's'}`;
+    const h = Math.round(m / 60);
+    if (h < 48) return `in ${h} hour${h === 1 ? '' : 's'}`;
+    const d = Math.round(h / 24);
+    return `in ${d} days`;
+}
+
+function closesField(current, { keep = null } = {}) {
+    const opts = (keep ? [['keep', keep]] : []).concat(keep ? CLOSES.map(([v, t]) => [v || 'never', v ? `${t.replace('In ', '')} from now` : 'Only when you close it']) : CLOSES);
+    return `<label class="cn-field cn-field-closes"><span>Closes by itself</span><select name="expires_in">${opts.map(([v, t]) => `<option value="${esc(v)}"${String(current) === v ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select><small>The address answers "ended" after that, and the computer is disconnected.</small></label>`;
+}
+
 function createForm({ values = {}, error = null, username = '', staff = false } = {}) {
     const handle = String(username || 'you').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'you';
     return `<form class="cn-form" method="post" action="/shares" id="new">
@@ -82,6 +103,7 @@ ${error ? `<p class="cn-error" role="alert">${esc(error)}</p>` : ''}
 <label class="cn-field"><span>Name</span><span class="cn-addr"><input name="label" required maxlength="40" pattern="[a-z0-9]([a-z0-9]|-(?=[a-z0-9])){0,39}" value="${esc(values.label || '')}" placeholder="agents" autocapitalize="none" autocomplete="off" spellcheck="false"><span class="cn-addr-tail">--${esc(handle)}.openvibe.website</span></span><small>a–z, 0–9 and hyphens</small></label>
 <label class="cn-field cn-field-port"><span>Port on your computer</span><input name="port" required inputmode="numeric" pattern="[0-9]{1,5}" maxlength="5" value="${esc(values.port || '')}" placeholder="8080"></label>
 </div>
+${closesField(values.expires_in == null ? '' : values.expires_in)}
 <fieldset class="cn-modes"><legend>Who can open it</legend>
 ${modeChoices(values.mode || 'owner', staff)}
 </fieldset>
@@ -223,6 +245,7 @@ ${modeChoices(share.mode, staff)}
 </fieldset>
 <label class="cn-field"><span>People (for "the people you name")</span><input name="named" maxlength="2000" value="${esc(share.named.join(', '))}" placeholder="sam, riley" autocapitalize="none" autocomplete="off" spellcheck="false"><small>OpenVibe usernames, separated by commas</small></label>
 <label class="cn-field cn-field-port"><span>Port on your computer</span><input name="port" inputmode="numeric" pattern="[0-9]{1,5}" maxlength="5" value="${esc(share.local_port)}"></label>
+${closesField('keep', { keep: share.expires_at ? `As it is: ${until(share.expires_at, now)}` : 'As it is: only when you close it' })}
 <button class="cn-btn" type="submit">${kit.icon('check')} Save</button>
 <p class="cn-fine">Changing who can open it signs everyone out of this share; the people still allowed are let back in when they next open it.</p>
 </form>`;
@@ -245,6 +268,7 @@ ${key ? keyBlock(share, key, baseUrl) : ''}
 <div><dt>Data</dt><dd>${esc(fmtBytes(share.bytes_in))} in · ${esc(fmtBytes(share.bytes_out))} out</dd></div>
 <div><dt>Key</dt><dd><code>${esc(share.key_prefix)}…</code></dd></div>
 <div><dt>Made</dt><dd>${esc(ago(share.created_at, now))}</dd></div>
+${share.expires_at ? `<div><dt>${closed ? 'Ended' : 'Closes'}</dt><dd><time datetime="${esc(share.expires_at)}">${esc(closed ? ago(share.expires_at, now) : until(share.expires_at, now))}</time></dd></div>` : ''}
 </dl>
 ${!key && !closed ? `<section class="cn-run"><h2>Connect it</h2><div class="cn-copy"><code id="cn-run">node ov-connect.js --key ovc_… --port ${esc(share.local_port)}</code></div><p class="cn-fine">The key was shown once, when it was made. <a href="${esc(CLIENT_URL(baseUrl))}">Download ov-connect.js</a> (Node 22 or newer).</p></section>` : ''}
 <section aria-labelledby="cn-visits-h"><h2 id="cn-visits-h">Who opened it (7 days)</h2>${visitRows}</section>
@@ -270,4 +294,4 @@ function message({ title, text, link = null }) {
 
 function notFound() { return message({ title: 'Not found', text: 'There is no page here.', link: { href: '/', label: 'OpenVibe Connect' } }); }
 
-module.exports = { home, sharePage, grantDenied, message, notFound, MODE_TEXT, fmtBytes, ago, requestRow, size };
+module.exports = { home, sharePage, grantDenied, message, notFound, MODE_TEXT, fmtBytes, ago, until, requestRow, size };

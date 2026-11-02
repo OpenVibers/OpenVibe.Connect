@@ -277,6 +277,42 @@ async function until(fn, ms = 3000) {
         assert.deepStrictEqual([refused.status, refused.error], [502, 'local_refused'], 'nothing listening is named');
     });
 
+    await check('a share can close itself (CON-6): set, changed, kept, refused when odd, and ended on time', async () => {
+        const made2 = await t.get('/api/v1/shares', { as: alex, method: 'POST', json: { label: 'brief', port: app.port, expires_in: 3600 } });
+        assert.strictEqual(made2.status, 201, made2.text);
+        const { share: brief, key } = made2.json();
+        const left = Date.parse(brief.expires_at) - Date.now();
+        assert.ok(left > 3500 * 1000 && left <= 3600 * 1000, `about an hour (${left} ms)`);
+        assert.strictEqual((await t.get('/api/v1/shares', { as: alex, method: 'POST', json: { label: 'blink', port: app.port, expires_in: 5 } })).json().code, 'share.invalid_expiry');
+        const kept = (await t.get(`/api/v1/shares/${brief.id}`, { as: alex, method: 'PATCH', json: { note: 'still brief' } })).json().share;
+        assert.strictEqual(kept.expires_at, brief.expires_at, 'a change without expires_in keeps the time');
+        const open = (await t.get(`/api/v1/shares/${brief.id}`, { as: alex, method: 'PATCH', json: { expires_in: null } })).json().share;
+        assert.strictEqual(open.expires_at, null, 'null: open until closed');
+        const again = (await t.get(`/api/v1/shares/${brief.id}`, { as: alex, method: 'PATCH', json: { expires_in: 600 } })).json().share;
+        assert.ok(Date.parse(again.expires_at) - Date.now() <= 600 * 1000);
+        const pageText = (await t.get(`/shares/${brief.id}`, { as: alex })).text;
+        assert.match(pageText, /<dt>Closes<\/dt><dd><time datetime="[^"]+">in 10 minutes<\/time>/);
+        assert.match(pageText, /<option value="keep" selected>As it is: in 10 minutes<\/option>/);
+
+        const cBrief = t.client({ key, port: app.port });
+        await cBrief.ready();
+        const cookie = (await t.enter(alex, brief)).cookie;
+        assert.strictEqual((await t.share(brief.host, '/', { cookie, headers: { accept: 'application/json' } })).status, 200);
+        // The time is up: the address says so at once, and the sweep closes it and lets the computer go.
+        await t.ctx.s.db.exec("UPDATE shares SET expires_at = now() - interval '1 second' WHERE id = $1", [brief.id]);
+        t.ctx.proxy.forget(brief.host);
+        const ended = await t.share(brief.host, '/', { cookie, headers: { accept: 'application/json' } });
+        assert.strictEqual(ended.status, 410);
+        assert.match(ended.text, /expired/);
+        const due = await t.ctx.expireSweep();
+        assert.deepStrictEqual(due.map((r) => r.id), [brief.id]);
+        await until(() => cBrief.lines.some((l) => /Stopped/.test(l)));
+        const after = (await t.get(`/api/v1/shares/${brief.id}`, { as: alex })).json().share;
+        assert.deepStrictEqual([after.status, after.expired], ['revoked', true]);
+        assert.match((await t.get(`/shares/${brief.id}`, { as: alex })).text, /<dt>Ended<\/dt>/);
+        assert.deepStrictEqual(await t.ctx.expireSweep(), [], 'once');
+    });
+
     await check('another person cannot see, change or close someone else\'s share', async () => {
         assert.strictEqual((await t.get(`/api/v1/shares/${made.share.id}`, { as: bob })).status, 404);
         assert.strictEqual((await t.get(`/api/v1/shares/${made.share.id}`, { as: bob, method: 'DELETE' })).status, 404);

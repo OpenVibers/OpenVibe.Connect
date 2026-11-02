@@ -56,7 +56,7 @@ function createPageRoutes(ctx) {
 
     r.post('/shares', async (req, res) => {
         if (!guard(req, res)) return undefined;
-        const input = { label: req.body.label, port: req.body.port, mode: req.body.mode, named: req.body.named };
+        const input = { label: req.body.label, port: req.body.port, mode: req.body.mode, named: req.body.named, expires_in: req.body.expires_in };
         try {
             const { share, key } = await shares.create(owner(req), input);
             return page(req, res, { title: share.host, body: views.sharePage({ share, connected: false, key, baseUrl: config.baseUrl, staff: req.viewer.role === 'admin', notice: 'Your share is made. Run the command below on your computer.' }) }, 201);
@@ -96,7 +96,7 @@ function createPageRoutes(ctx) {
         const share = await mine(req, res);
         if (!share) return undefined;
         try {
-            const updated = await shares.setPolicy(owner(req), share.id, { mode: req.body.mode, named: req.body.named, port: req.body.port === undefined || req.body.port === '' ? undefined : Number(req.body.port) });
+            const updated = await shares.setPolicy(owner(req), share.id, { mode: req.body.mode, named: req.body.named, port: req.body.port === undefined || req.body.port === '' ? undefined : Number(req.body.port), expires_in: req.body.expires_in === undefined ? undefined : req.body.expires_in });
             proxy.forget(updated.host);
             return res.redirect(303, `/shares/${encodeURIComponent(share.id)}?saved=1`);
         } catch (err) {

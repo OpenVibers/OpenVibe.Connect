@@ -26,6 +26,9 @@ const LABEL_RE = /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,39}$/;
 const MODES = ['owner', 'named', 'signin'];
 const RESERVED_LABELS = new Set(['www', 'api', 'app', 'admin', 'connect', 'hooks', 'edge', 'share', 'status', 'mail', 'space', 'auth', 'login', 'openvibe']);
 const USERNAME_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$/;
+// How long a share may stay open by itself (CON-6): 10 minutes to 30 days, or until its owner closes it (null).
+const EXPIRES_MIN = 600;
+const EXPIRES_MAX = 30 * 86400;
 const SIGNIN_NOT_YET = '"Anyone signed in" opens with the abuse check. For now, name the people who may open it.';
 
 const isStaff = (owner) => Boolean(owner && owner.role === 'admin');
@@ -79,6 +82,16 @@ function normalizeNamed(list) {
     return out;
 }
 
+/** `expires_in` as given (seconds; '' / null / 0 / 'never' = no end) → seconds or null; a bad one throws. */
+function expiresIn(value) {
+    if (value == null || value === '' || value === 0 || value === '0' || value === 'never') return null;
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < EXPIRES_MIN || n > EXPIRES_MAX) {
+        throw new ShareError(422, 'share.invalid_expiry', 'A share can close itself after 10 minutes to 30 days, or stay open until you close it.');
+    }
+    return n;
+}
+
 function createShares(s, { config }) {
     const { db } = s;
     const domain = config.shares.domain;
@@ -104,6 +117,9 @@ function createShares(s, { config }) {
             created_at: iso(row.created_at),
             updated_at: iso(row.updated_at),
             revoked_at: iso(row.revoked_at),
+            expires_at: iso(row.expires_at),
+            // It closed itself: revoked at (or just after) the time it was given.
+            expired: row.status === 'revoked' && Boolean(row.expires_at && row.revoked_at && new Date(row.revoked_at) >= new Date(row.expires_at)),
             last_connected_at: iso(row.last_connected_at),
             last_visit_at: iso(row.last_visit_at),
             requests: Number(row.requests || 0),
@@ -146,6 +162,7 @@ function createShares(s, { config }) {
         const host = hostFor(label, owner.username, domain);
         if (!host) throw new ShareError(422, 'share.name_too_long', 'That name and your username make an address longer than 63 characters. Pick a shorter name.');
         const note = input.note ? String(input.note).slice(0, 200) : null;
+        const ttl = expiresIn(input.expires_in);
 
         const live = await db.one("SELECT count(*)::int AS n FROM shares WHERE owner_subject = $1 AND status = 'active'", [owner.subject]);
         if (live.n >= config.shares.perPerson) throw new ShareError(409, 'share.limit', `You have ${live.n} shares open, the most for now. Close one first.`);
@@ -160,9 +177,9 @@ function createShares(s, { config }) {
         const id = s.newId('shr');
         try {
             await db.exec(
-                `INSERT INTO shares (id, owner_subject, owner_username, label, host, local_port, mode, named, key_prefix, key_hash, note)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11)`,
-                [id, owner.subject, String(owner.username).slice(0, 64), label, host, port, mode, JSON.stringify(named), key.slice(0, 10), sha256(key), note],
+                `INSERT INTO shares (id, owner_subject, owner_username, label, host, local_port, mode, named, key_prefix, key_hash, note, expires_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, CASE WHEN $12::int IS NULL THEN NULL ELSE now() + make_interval(secs => $12::int) END)`,
+                [id, owner.subject, String(owner.username).slice(0, 64), label, host, port, mode, JSON.stringify(named), key.slice(0, 10), sha256(key), note, ttl],
             );
         } catch (err) {
             if (err && err.code === '23505') throw new ShareError(409, 'share.taken', 'That address is taken. Pick another name.');
@@ -183,10 +200,15 @@ function createShares(s, { config }) {
         if (!Number.isInteger(port) || port < 1 || port > 65535) throw new ShareError(422, 'share.invalid_port', 'The port is a number from 1 to 65535.');
         const note = input.note === undefined ? share.note : (input.note ? String(input.note).slice(0, 200) : null);
         const policyChanged = mode !== share.mode || JSON.stringify(named) !== JSON.stringify(share.named);
+        // expires_in: undefined keeps the time it has; null / '' / 'never' takes it away; seconds set it from now.
+        const keepExpiry = input.expires_in === undefined || input.expires_in === 'keep';
+        const ttl = keepExpiry ? null : expiresIn(input.expires_in);
         await db.exec(
             `UPDATE shares SET mode = $2, named = $3::jsonb, local_port = $4, note = $5, updated_at = now(),
-                    policy_version = policy_version + $6 WHERE id = $1`,
-            [share.id, mode, JSON.stringify(named), port, note, policyChanged ? 1 : 0],
+                    policy_version = policy_version + $6,
+                    expires_at = CASE WHEN $7::boolean THEN expires_at WHEN $8::int IS NULL THEN NULL ELSE now() + make_interval(secs => $8::int) END
+              WHERE id = $1`,
+            [share.id, mode, JSON.stringify(named), port, note, policyChanged ? 1 : 0, keepExpiry, ttl],
         );
         return get(share.id);
     }
@@ -204,6 +226,14 @@ function createShares(s, { config }) {
         if (share.status === 'revoked') return share;
         await db.exec("UPDATE shares SET status = 'revoked', revoked_at = now(), updated_at = now(), policy_version = policy_version + 1 WHERE id = $1", [share.id]);
         return get(share.id);
+    }
+
+    /** Close every share whose time is up (the sweep in app.js); returns them, so their computers are let go. */
+    async function expireDue() {
+        return db.many(
+            `UPDATE shares SET status = 'revoked', revoked_at = now(), updated_at = now(), policy_version = policy_version + 1
+              WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at <= now() RETURNING id, host`,
+        );
     }
 
     async function touchConnected(id) { await db.exec('UPDATE shares SET last_connected_at = now() WHERE id = $1', [id]); }
@@ -245,7 +275,7 @@ function createShares(s, { config }) {
         return false;
     }
 
-    return { create, list, get, byHost, byKey, setPolicy, rotateKey, revoke, touchConnected, flushCounters, visits, allows, view, domain };
+    return { create, list, get, byHost, byKey, setPolicy, rotateKey, revoke, expireDue, touchConnected, flushCounters, visits, allows, view, domain };
 }
 
 function iso(v) {

@@ -5,9 +5,10 @@
  * Bearer). A session write must come from connect.openvibe.website itself (403 connect.cross_site).
  *
  *   GET    /shares               your shares (website.share@1 shapes, plus connected)
- *   POST   /shares               { label, port, mode?, named? } → 201 { share, key }   the key is in this answer only
+ *   POST   /shares               { label, port, mode?, named?, expires_in? } → 201 { share, key }   the key is in this answer only
  *   GET    /shares/:id           one of your shares
- *   PATCH  /shares/:id           { mode?, named?, port?, note? }
+ *   PATCH  /shares/:id           { mode?, named?, port?, note?, expires_in? }   expires_in: seconds from now (600 to 30 days),
+ *                                or null to stay open until you close it
  *   DELETE /shares/:id           close it (the host answers 410 from then on)
  *   POST   /shares/:id/key       a new key → { share, key }; the connected computer is disconnected
  *   GET    /shares/:id/visits    who opened it in the last 7 days
@@ -44,7 +45,7 @@ function createApi(ctx) {
     r.post('/shares', guard(async (req, res) => {
         if (!req.principal.username) return fail(res, req, 403, 'identity.no_username', 'Your account needs a username before it can share.');
         const b = req.body || {};
-        const { share, key } = await shares.create(owner(req), { label: b.label, port: b.port, mode: b.mode, named: b.named, note: b.note });
+        const { share, key } = await shares.create(owner(req), { label: b.label, port: b.port, mode: b.mode, named: b.named, note: b.note, expires_in: b.expires_in });
         return res.status(201).json({ share: shape(share), key });
     }));
 
@@ -63,7 +64,7 @@ function createApi(ctx) {
         const share = await mine(req, res);
         if (!share) return undefined;
         const b = req.body || {};
-        const updated = await shares.setPolicy(owner(req), share.id, { mode: b.mode, named: b.named, port: b.port, note: b.note });
+        const updated = await shares.setPolicy(owner(req), share.id, { mode: b.mode, named: b.named, port: b.port, note: b.note, expires_in: b.expires_in });
         proxy.forget(updated.host);
         return res.json({ share: shape(updated) });
     }));

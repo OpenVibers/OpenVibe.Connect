@@ -21,6 +21,7 @@ function createLifecycle({ server, ctx, exit, signals, timers = [], extra = [] }
             () => { for (const t of timers) clearInterval(t); },
             () => ctx.tunnels.closeAll(),
             () => ctx.proxy.stop(),
+            () => clearInterval(ctx.expiryTimer),
             () => ctx.gate.stop(),
             () => ctx.keys.client.stop(),
             async () => { clearInterval(ctx.telemetryTick); if (ctx.retention) await ctx.retention.stop(); if (ctx.telemetry) await ctx.telemetry.stop(); },
