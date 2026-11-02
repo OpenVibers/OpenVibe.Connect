@@ -16,7 +16,9 @@
  *
  * Modes (website.policy@1's subset that v0 serves): owner (only the person who made it), named (the owner and the
  * OpenVibe usernames listed) and signin (anyone signed in to OpenVibe). A public share waits for the abuse screen
- * and the Public Suffix List entry (ADR-057, CON-9 and CON-21), so it is refused here.
+ * and the Public Suffix List entry (ADR-057, CON-9 and CON-21), so it is refused here. Since anyone can make an
+ * OpenVibe account, "anyone signed in" is nearly public too: like Space's public publishing, it is open to OpenVibe
+ * staff (Network role admin) until the abuse check is in.
  */
 const crypto = require('crypto');
 
@@ -24,6 +26,9 @@ const LABEL_RE = /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,39}$/;
 const MODES = ['owner', 'named', 'signin'];
 const RESERVED_LABELS = new Set(['www', 'api', 'app', 'admin', 'connect', 'hooks', 'edge', 'share', 'status', 'mail', 'space', 'auth', 'login', 'openvibe']);
 const USERNAME_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$/;
+const SIGNIN_NOT_YET = '"Anyone signed in" opens with the abuse check. For now, name the people who may open it.';
+
+const isStaff = (owner) => Boolean(owner && owner.role === 'admin');
 
 class ShareError extends Error {
     constructor(status, code, message) { super(message); this.status = status; this.code = code; }
@@ -136,6 +141,7 @@ function createShares(s, { config }) {
         const mode = input.mode == null || input.mode === '' ? 'owner' : String(input.mode);
         if (mode === 'public') throw new ShareError(422, 'share.public_not_yet', 'Public shares open once the abuse check is in. For now a share asks every visitor to sign in with OpenVibe.');
         if (!MODES.includes(mode)) throw new ShareError(422, 'share.invalid_mode', `Who can open it: ${MODES.join(', ')}.`);
+        if (mode === 'signin' && !isStaff(owner)) throw new ShareError(403, 'share.signin_not_yet', SIGNIN_NOT_YET);
         const named = normalizeNamed(input.named);
         const host = hostFor(label, owner.username, domain);
         if (!host) throw new ShareError(422, 'share.name_too_long', 'That name and your username make an address longer than 63 characters. Pick a shorter name.');
@@ -171,6 +177,7 @@ function createShares(s, { config }) {
         const mode = input.mode == null ? share.mode : String(input.mode);
         if (mode === 'public') throw new ShareError(422, 'share.public_not_yet', 'Public shares open once the abuse check is in.');
         if (!MODES.includes(mode)) throw new ShareError(422, 'share.invalid_mode', `Who can open it: ${MODES.join(', ')}.`);
+        if (mode === 'signin' && mode !== share.mode && !isStaff(owner)) throw new ShareError(403, 'share.signin_not_yet', SIGNIN_NOT_YET);
         const named = input.named === undefined ? share.named : normalizeNamed(input.named);
         const port = input.port === undefined ? share.local_port : Number(input.port);
         if (!Number.isInteger(port) || port < 1 || port > 65535) throw new ShareError(422, 'share.invalid_port', 'The port is a number from 1 to 65535.');
@@ -247,4 +254,4 @@ function iso(v) {
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-module.exports = { createShares, ShareError, hostFor, parseHost, handleOf, normalizeNamed, LABEL_RE, MODES, RESERVED_LABELS, sha256 };
+module.exports = { createShares, ShareError, isStaff, hostFor, parseHost, handleOf, normalizeNamed, LABEL_RE, MODES, RESERVED_LABELS, sha256 };

@@ -28,7 +28,7 @@ function createApi(ctx) {
     r.use(principal.requirePerson);
 
     const fail = (res, req, status, code, detail) => http.sendProblem(res, status, code, { detail, ctx: req.ov });
-    const owner = (req) => ({ subject: req.principal.subject, username: req.principal.username });
+    const owner = (req) => ({ subject: req.principal.subject, username: req.principal.username, role: req.principal.role });
     const shape = (s) => ({ ...s, connected: tunnels.isConnected(s.id) });
     const guard = (fn) => async (req, res) => {
         try { return await fn(req, res); } catch (err) {

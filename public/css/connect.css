@@ -82,7 +82,10 @@
 .cn-modes legend { font-size: 14px; font-weight: 600; margin-bottom: 8px; padding: 0; }
 .cn-modes label { display: flex; align-items: center; gap: 10px; min-height: var(--ovk-tap, 44px); padding: 0 12px; border-radius: 10px; border: 1px solid var(--ovk-line); background: var(--ovk-bg); cursor: pointer; font-size: 15px; }
 .cn-modes label:has(input:checked) { border-color: color-mix(in srgb, var(--room-accent) 60%, var(--ovk-line)); }
-.cn-modes input { accent-color: var(--room-accent); width: 18px; height: 18px; margin: 0; }
+.cn-modes input { accent-color: var(--room-accent); width: 18px; height: 18px; margin: 0; flex: none; }
+.cn-modes label > span { display: grid; gap: 1px; padding: 6px 0; }
+.cn-modes label > span small { font-size: 12px; color: var(--ovk-muted); }
+.cn-modes label.is-off { cursor: not-allowed; color: var(--ovk-muted); }
 @media (min-width: 720px) { .cn-modes { grid-template-columns: repeat(3, minmax(0, 1fr)); } .cn-modes legend { grid-column: 1 / -1; } }
 
 .cn-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: var(--ovk-tap, 44px); padding: 0 18px; border-radius: 12px; border: 1px solid transparent; background: var(--room-fill); color: var(--room-on); font: inherit; font-weight: 700; font-size: 15px; cursor: pointer; text-decoration: none; justify-self: start; }

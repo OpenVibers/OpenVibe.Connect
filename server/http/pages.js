@@ -26,7 +26,7 @@ function createPageRoutes(ctx) {
     r.use(express.urlencoded({ extended: false, limit: '16kb' }));
     const page = (req, res, o, status = 200) => send(res, status, { viewer: req.viewer, config, path: req.originalUrl, ...o });
     const signedIn = (req) => Boolean(req.viewer && req.viewer.kind === 'user' && req.viewer.subject);
-    const owner = (req) => ({ subject: req.viewer.subject, username: req.viewer.username });
+    const owner = (req) => ({ subject: req.viewer.subject, username: req.viewer.username, role: req.viewer.role });
     const loginTo = (path) => `/auth/login?next=${encodeURIComponent(path)}`;
     const guard = (req, res) => {
         if (!signedIn(req)) { res.redirect(303, loginTo(req.originalUrl)); return false; }
@@ -59,7 +59,7 @@ function createPageRoutes(ctx) {
         const input = { label: req.body.label, port: req.body.port, mode: req.body.mode, named: req.body.named };
         try {
             const { share, key } = await shares.create(owner(req), input);
-            return page(req, res, { title: share.host, body: views.sharePage({ share, connected: false, key, baseUrl: config.baseUrl, notice: 'Your share is made. Run the command below on your computer.' }) }, 201);
+            return page(req, res, { title: share.host, body: views.sharePage({ share, connected: false, key, baseUrl: config.baseUrl, staff: req.viewer.role === 'admin', notice: 'Your share is made. Run the command below on your computer.' }) }, 201);
         } catch (err) {
             if (!(err instanceof ShareError)) throw err;
             const list = await shares.list(req.viewer.subject);
@@ -81,7 +81,7 @@ function createPageRoutes(ctx) {
     async function showShare(req, res, share, extra = {}, status = 200) {
         const tunnel = tunnels.get(share.id);
         const visits = await shares.visits(share.id);
-        return page(req, res, { title: share.host, body: views.sharePage({ share, connected: Boolean(tunnel), tunnel, visits, baseUrl: config.baseUrl, ...extra }) }, status);
+        return page(req, res, { title: share.host, body: views.sharePage({ share, connected: Boolean(tunnel), tunnel, visits, baseUrl: config.baseUrl, staff: req.viewer.role === 'admin', ...extra }) }, status);
     }
 
     r.get('/shares/:id', async (req, res) => {

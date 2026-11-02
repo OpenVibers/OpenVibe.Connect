@@ -64,7 +64,15 @@ function shareRow(s, { connected }) {
 ${kit.icon('chevron')}</a></li>`;
 }
 
-function createForm({ values = {}, error = null, username = '' } = {}) {
+/** The three choices; "anyone signed in" is staff-only until the abuse check (shares.js). */
+function modeChoices(current, staff) {
+    return Object.entries(MODE_TEXT).map(([k, v]) => {
+        const off = k === 'signin' && !staff && current !== 'signin';
+        return `<label${off ? ' class="is-off"' : ''}><input type="radio" name="mode" value="${k}"${current === k ? ' checked' : ''}${off ? ' disabled' : ''}> <span>${esc(v)}${off ? '<small>opens with the abuse check</small>' : ''}</span></label>`;
+    }).join('');
+}
+
+function createForm({ values = {}, error = null, username = '', staff = false } = {}) {
     const handle = String(username || 'you').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'you';
     return `<form class="cn-form" method="post" action="/shares" id="new">
 <h2>Make a share</h2>
@@ -74,7 +82,7 @@ ${error ? `<p class="cn-error" role="alert">${esc(error)}</p>` : ''}
 <label class="cn-field cn-field-port"><span>Port on your computer</span><input name="port" required inputmode="numeric" pattern="[0-9]{1,5}" maxlength="5" value="${esc(values.port || '')}" placeholder="8080"></label>
 </div>
 <fieldset class="cn-modes"><legend>Who can open it</legend>
-${Object.entries(MODE_TEXT).map(([k, v]) => `<label><input type="radio" name="mode" value="${k}"${(values.mode || 'owner') === k ? ' checked' : ''}> ${esc(v)}</label>`).join('')}
+${modeChoices(values.mode || 'owner', staff)}
 </fieldset>
 <label class="cn-field"><span>People (for "the people you name")</span><input name="named" maxlength="2000" value="${esc(values.named || '')}" placeholder="sam, riley" autocapitalize="none" autocomplete="off" spellcheck="false"><small>OpenVibe usernames, separated by commas</small></label>
 <button class="cn-btn" type="submit">${kit.icon('plus')} Make the share</button>
@@ -90,7 +98,7 @@ function yourShares({ viewer, shares, connectedIds, form }) {
         ? `<ul class="cn-shares">${open.map((s) => shareRow(s, { connected: connectedIds.has(s.id) })).join('')}</ul>`
         : '<p class="cn-empty">No shares yet. Make one below: a name, a port, who can open it.</p>';
     const closedList = closed.length ? `<details class="cn-closed"><summary>Closed shares (${closed.length})</summary><ul class="cn-shares">${closed.map((s) => shareRow(s, { connected: false })).join('')}</ul></details>` : '';
-    return `<section class="cn-yours" aria-labelledby="cn-yours-h"><h2 id="cn-yours-h">Your shares</h2>${list}${closedList}${createForm(form || { username: viewer.username })}</section>`;
+    return `<section class="cn-yours" aria-labelledby="cn-yours-h"><h2 id="cn-yours-h">Your shares</h2>${list}${closedList}${createForm({ username: viewer.username, ...(form || {}), staff: viewer.role === 'admin' })}</section>`;
 }
 
 function home({ viewer, shares = [], connectedIds = new Set(), stats = {}, baseUrl, form = null }) {
@@ -126,7 +134,7 @@ function home({ viewer, shares = [], connectedIds = new Set(), stats = {}, baseU
             },
             {
                 title: 'You pick who gets in',
-                text: 'Only you, you and the people you name, or anyone signed in to OpenVibe. Change it any time and everyone already in is asked again. Your app is told who each visitor is, so it can greet them by name.',
+                text: 'Only you, or you and the people you name. Change it any time and everyone already in is asked again. Your app is told who each visitor is, so it can greet them by name.',
                 html: picker(),
             },
         ],
@@ -143,7 +151,7 @@ function home({ viewer, shares = [], connectedIds = new Set(), stats = {}, baseU
         faq: {
             items: [
                 ['What can the server make my computer do?', 'Nothing but answer requests for your share on the one port you gave the client, on localhost. The client never opens a connection anywhere else, and you can read all of it: it is one file.'],
-                ['Who can open my share?', 'People you allow, after they sign in with OpenVibe: only you, you and named people, or anyone signed in. Changing who can open it signs everyone out of that share at once.'],
+                ['Who can open my share?', 'People you allow, after they sign in with OpenVibe: only you, or you and the people you name. "Anyone signed in" is open to OpenVibe staff until the abuse check is in. Changing who can open a share signs everyone out of it at once.'],
                 ['Can I make it public?', 'Not yet. A public address can be abused for phishing, so public shares come with the abuse check and openvibe.website\'s entry in the Public Suffix List. Until then every visitor signs in.'],
                 ['What does my app see?', 'The request as the browser sent it, with Host set to localhost:<port>, the share\'s address in X-Forwarded-Host, the visitor\'s address in X-Forwarded-For, and who they are in X-OpenVibe-User and X-OpenVibe-Subject. Cookies your app sets stay on your share\'s address.'],
                 ['What are the limits?', 'Five open shares per person, 64 requests at once per share, 1,200 requests a minute per share, 100 MB per request body, and 10 GB a day across your shares. Nothing is stored: requests pass through.'],
@@ -181,7 +189,7 @@ function keyBlock(share, key, baseUrl) {
 </section>`;
 }
 
-function sharePage({ share, connected, tunnel = null, visits = [], key = null, baseUrl, notice = null, error = null, now = Date.now() }) {
+function sharePage({ share, connected, tunnel = null, visits = [], key = null, baseUrl, notice = null, error = null, staff = false, now = Date.now() }) {
     const closed = share.status !== 'active';
     const state = closed ? 'Closed' : connected ? 'Connected' : 'Not connected';
     const stateText = closed ? `Closed ${ago(share.revoked_at, now)}. The address answers "closed" and stays yours.`
@@ -193,7 +201,7 @@ function sharePage({ share, connected, tunnel = null, visits = [], key = null, b
     const policy = closed ? '' : `<form class="cn-form cn-policy" method="post" action="/shares/${esc(share.id)}/policy">
 <h2>Who can open it</h2>
 <fieldset class="cn-modes"><legend class="cn-sr">Who can open it</legend>
-${Object.entries(MODE_TEXT).map(([k, v]) => `<label><input type="radio" name="mode" value="${k}"${share.mode === k ? ' checked' : ''}> ${esc(v)}</label>`).join('')}
+${modeChoices(share.mode, staff)}
 </fieldset>
 <label class="cn-field"><span>People (for "the people you name")</span><input name="named" maxlength="2000" value="${esc(share.named.join(', '))}" placeholder="sam, riley" autocapitalize="none" autocomplete="off" spellcheck="false"><small>OpenVibe usernames, separated by commas</small></label>
 <label class="cn-field cn-field-port"><span>Port on your computer</span><input name="port" inputmode="numeric" pattern="[0-9]{1,5}" maxlength="5" value="${esc(share.local_port)}"></label>
