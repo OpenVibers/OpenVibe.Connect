@@ -153,7 +153,7 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
     }
 
     // ── Pages the gate answers itself (self-contained: a share host loads nothing from anywhere else) ──
-    function sendPage(res, status, title, text, { link = null, headers = {} } = {}) {
+    function sendPage(res, status, title, text, { link = null, headers = {}, refresh = 0, note = '' } = {}) {
         if (res.headersSent) { res.destroy(); return; }
         res.writeHead(status, {
             'content-type': 'text/html; charset=utf-8',
@@ -165,7 +165,7 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
             'referrer-policy': 'no-referrer',
             ...headers,
         });
-        res.end(page(title, text, link));
+        res.end(page(title, text, link, { refresh, note }));
     }
     function wantsHtml(req) { return /text\/html/.test(String(req.headers.accept || '')) && (req.method === 'GET' || req.method === 'HEAD'); }
     function sendProblem(req, res, status, code, title, text, extra = {}) {
@@ -190,7 +190,13 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
         if (overBytes(share)) { visit(share, who, { denied: true }); sendProblem(req, res, 429, 'over_daily_limit', 'Over today\'s limit', `${share.owner_username}'s shares moved as much data as they can today. They open again at midnight UTC.`); return null; }
         const tunnel = tunnels.get(share.id);
         if (!tunnel) {
-            sendProblem(req, res, 502, 'offline', `${share.owner_username}'s computer is not connected`, `Nothing is connected to ${share.host} right now. If it is yours, start ov-connect on your computer.`, { link: { href: `${config.baseUrl}/shares/${share.id}`, text: 'Open the share page' }, headers: { 'retry-after': '5' } });
+            // Keep-online, v0 (CON-17): a browser waits on this page, asking again every 10 seconds, and lands on the app
+            // the moment its computer is back; when it was last connected says how long the wait may be.
+            const last = share.last_connected_at ? ` It was last connected ${ago(share.last_connected_at, now())}.` : '';
+            sendProblem(req, res, 503, 'offline', `${share.owner_username}'s computer is not connected`, `Nothing is connected to ${share.host} right now.${last} If it is yours, start ov-connect on your computer.`, {
+                link: { href: `${config.baseUrl}/shares/${share.id}`, text: 'Open the share page' }, headers: { 'retry-after': '10' },
+                refresh: 10, note: 'This page asks again every 10 seconds and opens the app as soon as the computer is back.',
+            });
             return null;
         }
         if (tunnel.busy) { sendProblem(req, res, 503, 'busy', 'Busy', 'This share is answering as many requests as it can at once. Try again in a moment.', { headers: { 'retry-after': '2' } }); return null; }
@@ -387,18 +393,33 @@ const STATUS_TEXT = { 302: 'Found', 400: 'Bad Request', 401: 'Unauthorized', 404
 
 const escapeHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-/** The gate's own page: plain, readable in both themes, no outside resources. */
-function page(title, text, link) {
+/** "3 minutes ago", "2 hours ago", "4 days ago". */
+function ago(iso, nowMs = Date.now()) {
+    const s = Math.max(0, Math.round((nowMs - Date.parse(iso)) / 1000));
+    if (!Number.isFinite(s)) return 'a while ago';
+    if (s < 90) return 'a minute ago';
+    const m = Math.round(s / 60);
+    if (m < 90) return `${m} minutes ago`;
+    const h = Math.round(m / 60);
+    if (h < 36) return `${h} hour${h === 1 ? '' : 's'} ago`;
+    return `${Math.round(h / 24)} days ago`;
+}
+
+/**
+ * The gate's own page: plain, readable in both themes, no outside resources. `refresh` (seconds) asks again by itself:
+ * a meta refresh, so it works under the page's no-script CSP.
+ */
+function page(title, text, link, { refresh = 0, note = '' } = {}) {
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex"><title>${escapeHtml(title)} · OpenVibe Connect</title>
+${refresh ? `<meta http-equiv="refresh" content="${Number(refresh) | 0}">` : ''}<meta name="robots" content="noindex"><title>${escapeHtml(title)} · OpenVibe Connect</title>
 <style>:root{color-scheme:light dark;--bg:#f6f7fb;--fg:#141824;--muted:#5b6275;--card:#fff;--line:#dfe3ee;--accent:#4B53C2}
 @media (prefers-color-scheme:dark){:root{--bg:#0d131d;--fg:#e8ecf5;--muted:#9aa3b8;--card:#141c2a;--line:#253047;--accent:#8EA0FF}}
 body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:24px max(16px,env(safe-area-inset-left))}
 main{max-width:30rem;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px}
 h1{font-size:1.35rem;margin:0 0 .5rem;text-wrap:balance}p{margin:0 0 1rem;color:var(--muted)}
 a{display:inline-block;color:var(--accent);font-weight:600;text-decoration:none;padding:10px 0;min-height:24px}a:hover{text-decoration:underline}
-.mark{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}</style></head>
-<body><main><div class="mark">OpenVibe Connect</div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(text)}</p>${link ? `<a href="${escapeHtml(link.href)}">${escapeHtml(link.text)}</a>` : ''}</main></body></html>`;
+.mark{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}.note{font-size:.9rem;padding:10px 12px;border-radius:10px;border:1px solid var(--line)}</style></head>
+<body><main><div class="mark">OpenVibe Connect</div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(text)}</p>${note ? `<p class="note">${escapeHtml(note)}</p>` : ''}${link ? `<a href="${escapeHtml(link.href)}">${escapeHtml(link.text)}</a>` : ''}</main></body></html>`;
 }
 
 module.exports = { createProxy, page, rawResponder };
