@@ -12,6 +12,8 @@ const { createAccountData, TOPICS } = require('openvibe-sdk/account-data');
 
 const TABLES = [
     { table: 'share_visits', subject: 'subject', value: (usr) => usr, file: 'visits.json', erase: 'delete' },
+    // "Tell me when it's back" (CON-17): the shares a person waits on, until told.
+    { table: 'share_waiters', subject: 'subject', value: (usr) => usr, file: 'waiting.json', erase: 'delete' },
     // Reports a person made (CON-9): exported; on erasure the report stays (a share may have been closed on it) and
     // the account is taken off it.
     { table: 'share_reports', subject: 'reporter_subject', value: (usr) => usr, file: 'reports.json', erase: { anonymize: {} },
