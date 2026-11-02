@@ -91,7 +91,7 @@ class Tunnel {
     }
 }
 
-function createTunnels({ shares, config, log = console }) {
+function createTunnels({ shares, config, log = console, onConnect = null }) {
     const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024, perMessageDeflate: false });
     const live = new Map();   // share id → Tunnel
     const stats = { connects: 0, refused: 0, replaced: 0 };
@@ -144,6 +144,8 @@ function createTunnels({ shares, config, log = console }) {
             tunnel = t;
             stats.connects++;
             shares.touchConnected(share.id).catch(() => {});
+            // The people who asked to be told it is back (CON-17); never in the way of the connection.
+            if (onConnect) Promise.resolve().then(() => onConnect(share)).catch(() => {});
             t.send({ t: 'ready', v: frames.VERSION, share: { id: share.id, host: share.host, url: share.url, mode: share.mode } });
             return undefined;
         });

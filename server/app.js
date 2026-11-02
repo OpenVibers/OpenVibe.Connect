@@ -57,7 +57,13 @@ async function createApp(opts = {}) {
     const sso = createSso({ config, keys, fetchImpl, now: s.now, log });
     const principal = createPrincipal({ config, keys });
     const shares = createShares(s, { config });
-    const tunnels = createTunnels({ shares, config, log });
+    // "Tell me when it's back" (CON-17): when a share's computer connects, everyone waiting on it gets one notification.
+    const notifier = opts.notifier || require('./notify').createNotifier({ config, fetchImpl, log });
+    const tunnels = createTunnels({ shares, config, log, onConnect: async (share) => {
+        const waiting = await shares.takeWaiters(share.id);
+        for (const subject of waiting) await notifier.shareBack(subject, share);
+        if (waiting.length) log.log(`[OpenVibe.Connect] told ${waiting.length} person(s) ${share.host} is back`);
+    } });
     const gate = createGate({ config, now: s.now });
     const proxy = createProxy({ config, shares, tunnels, gate, log, now: s.now });
 
@@ -66,7 +72,7 @@ async function createApp(opts = {}) {
         ? createNetworkSender({ networkInternalUrl: config.networkInternalUrl, clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret, fetch: fetchImpl })
         : async () => { throw new Error('OV_OAUTH_CLIENT_SECRET is not set: Connect cannot answer account events'); });
 
-    const ctx = { config, s, keys, sso, principal, shares, tunnels, gate, proxy, accountData, accountSend, log };
+    const ctx = { config, s, keys, sso, principal, shares, tunnels, gate, proxy, notifier, accountData, accountSend, log };
 
     /** Shares whose time is up close themselves (CON-6): their computers are disconnected and their lists forgotten. */
     ctx.expireSweep = async () => {

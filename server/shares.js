@@ -277,6 +277,19 @@ function createShares(s, { config }) {
         throw new ShareError(422, 'report.invalid_action', 'Close the share or dismiss the report.');
     }
 
+    // ── "Tell me when it's back" (CON-17) ───────────────────────────────────────────────────────────────────────
+    /** A person asks to be told when the share's computer connects again (at most 500 waiting per share). */
+    async function addWaiter(shareId, subject) {
+        const n = Number((await db.maybe('SELECT count(*)::int AS n FROM share_waiters WHERE share_id = $1', [shareId]) || {}).n || 0);
+        if (n >= 500) return false;
+        await db.exec('INSERT INTO share_waiters (share_id, subject) VALUES ($1, $2) ON CONFLICT DO NOTHING', [shareId, subject]);
+        return true;
+    }
+    /** Everyone waiting on a share, taken off the list at once (each is told once). */
+    async function takeWaiters(shareId) {
+        return (await db.many('DELETE FROM share_waiters WHERE share_id = $1 RETURNING subject', [shareId])).map((r) => r.subject);
+    }
+
     /** Close every share whose time is up (the sweep in app.js); returns them, so their computers are let go. */
     async function expireDue() {
         return db.many(
@@ -324,7 +337,7 @@ function createShares(s, { config }) {
         return false;
     }
 
-    return { create, list, get, byHost, byKey, setPolicy, rotateKey, revoke, expireDue, report, openReports, handleReport, touchConnected, flushCounters, visits, allows, view, domain };
+    return { create, list, get, byHost, byKey, setPolicy, rotateKey, revoke, expireDue, report, openReports, handleReport, addWaiter, takeWaiters, touchConnected, flushCounters, visits, allows, view, domain };
 }
 
 function iso(v) {
