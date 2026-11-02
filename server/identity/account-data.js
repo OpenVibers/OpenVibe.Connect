@@ -12,6 +12,10 @@ const { createAccountData, TOPICS } = require('openvibe-sdk/account-data');
 
 const TABLES = [
     { table: 'share_visits', subject: 'subject', value: (usr) => usr, file: 'visits.json', erase: 'delete' },
+    // Reports a person made (CON-9): exported; on erasure the report stays (a share may have been closed on it) and
+    // the account is taken off it.
+    { table: 'share_reports', subject: 'reporter_subject', value: (usr) => usr, file: 'reports.json', erase: { anonymize: {} },
+        columns: ['id', 'host', 'reason', 'details', 'status', 'created_at'] },
     {
         table: 'shares', subject: 'owner_subject', value: (usr) => usr, file: 'shares.json', erase: 'delete',
         columns: ['id', 'owner_username', 'label', 'host', 'local_port', 'mode', 'named', 'status', 'policy_version', 'key_prefix', 'note',

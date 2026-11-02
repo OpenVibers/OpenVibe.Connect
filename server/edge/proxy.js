@@ -153,7 +153,7 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
     }
 
     // ── Pages the gate answers itself (self-contained: a share host loads nothing from anywhere else) ──
-    function sendPage(res, status, title, text, { link = null, headers = {}, refresh = 0, note = '' } = {}) {
+    function sendPage(res, status, title, text, { link = null, headers = {}, refresh = 0, note = '', report = '' } = {}) {
         if (res.headersSent) { res.destroy(); return; }
         res.writeHead(status, {
             'content-type': 'text/html; charset=utf-8',
@@ -165,7 +165,7 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
             'referrer-policy': 'no-referrer',
             ...headers,
         });
-        res.end(page(title, text, link, { refresh, note }));
+        res.end(page(title, text, link, { refresh, note, report }));
     }
     function wantsHtml(req) { return /text\/html/.test(String(req.headers.accept || '')) && (req.method === 'GET' || req.method === 'HEAD'); }
     function sendProblem(req, res, status, code, title, text, extra = {}) {
@@ -196,6 +196,7 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
             sendProblem(req, res, 503, 'offline', `${share.owner_username}'s computer is not connected`, `Nothing is connected to ${share.host} right now.${last} If it is yours, start ov-connect on your computer.`, {
                 link: { href: `${config.baseUrl}/shares/${share.id}`, text: 'Open the share page' }, headers: { 'retry-after': '10' },
                 refresh: 10, note: 'This page asks again every 10 seconds and opens the app as soon as the computer is back.',
+                report: `${config.baseUrl}/report?host=${encodeURIComponent(share.host)}`,
             });
             return null;
         }
@@ -216,6 +217,7 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
         // Its time is up: closed now, even before the sweep (app.js) marks it.
         const expired = share.expired || (share.status === 'active' && share.expires_at && Date.parse(share.expires_at) <= now());
         if (expired) { sendProblem(req, res, 410, 'expired', 'This share has ended', `${share.host} was shared until ${new Date(share.expires_at).toUTCString().replace(' GMT', ' UTC')}, and that time is up.`, { link: { href: config.baseUrl, text: 'What is OpenVibe Connect?' } }); return null; }
+        if (share.status !== 'active' && share.closed_reason === 'report') { sendProblem(req, res, 410, 'closed', 'This share was closed', `OpenVibe closed ${share.host} after a report.`, { link: { href: config.baseUrl, text: 'What is OpenVibe Connect?' } }); return null; }
         if (share.status !== 'active') { sendProblem(req, res, 410, 'closed', 'This share is closed', `${share.owner_username} closed ${share.host}.`, { link: { href: config.baseUrl, text: 'What is OpenVibe Connect?' } }); return null; }
         return share;
     }
@@ -409,7 +411,7 @@ function ago(iso, nowMs = Date.now()) {
  * The gate's own page: plain, readable in both themes, no outside resources. `refresh` (seconds) asks again by itself:
  * a meta refresh, so it works under the page's no-script CSP.
  */
-function page(title, text, link, { refresh = 0, note = '' } = {}) {
+function page(title, text, link, { refresh = 0, note = '', report = '' } = {}) {
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 ${refresh ? `<meta http-equiv="refresh" content="${Number(refresh) | 0}">` : ''}<meta name="robots" content="noindex"><title>${escapeHtml(title)} · OpenVibe Connect</title>
 <style>:root{color-scheme:light dark;--bg:#f6f7fb;--fg:#141824;--muted:#5b6275;--card:#fff;--line:#dfe3ee;--accent:#4B53C2}
@@ -418,8 +420,8 @@ body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--
 main{max-width:30rem;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px}
 h1{font-size:1.35rem;margin:0 0 .5rem;text-wrap:balance}p{margin:0 0 1rem;color:var(--muted)}
 a{display:inline-block;color:var(--accent);font-weight:600;text-decoration:none;padding:10px 0;min-height:24px}a:hover{text-decoration:underline}
-.mark{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}.note{font-size:.9rem;padding:10px 12px;border-radius:10px;border:1px solid var(--line)}</style></head>
-<body><main><div class="mark">OpenVibe Connect</div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(text)}</p>${note ? `<p class="note">${escapeHtml(note)}</p>` : ''}${link ? `<a href="${escapeHtml(link.href)}">${escapeHtml(link.text)}</a>` : ''}</main></body></html>`;
+.mark{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}.note{font-size:.9rem;padding:10px 12px;border-radius:10px;border:1px solid var(--line)}.report{margin:0;font-size:.85rem}.report a{font-weight:500;color:var(--muted)}</style></head>
+<body><main><div class="mark">OpenVibe Connect</div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(text)}</p>${note ? `<p class="note">${escapeHtml(note)}</p>` : ''}${link ? `<a href="${escapeHtml(link.href)}">${escapeHtml(link.text)}</a>` : ''}${report ? `<p class="report"><a href="${escapeHtml(report)}">Report this share</a></p>` : ''}</main></body></html>`;
 }
 
 module.exports = { createProxy, page, rawResponder };

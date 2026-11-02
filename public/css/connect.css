@@ -165,3 +165,13 @@
     .cn .sc-room-pic { position: static; z-index: auto; width: auto; opacity: 1; pointer-events: auto; margin-top: 4px; }
     .cn .cn-motif { width: 100%; }
 }
+/* Reports (CON-9 v0): the staff queue. */
+.cn-reports { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.cn-report { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--ovk-line); background: var(--ovk-panel); display: grid; gap: 6px; }
+.cn-report-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
+.cn-report-head a { overflow-wrap: anywhere; }
+.cn-report-head span, .cn-report p { color: var(--ovk-muted); font-size: 14px; margin: 0; }
+.cn-report blockquote { margin: 0; padding: 8px 12px; border-left: 3px solid var(--ovk-line); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+.cn-report-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.cn-field textarea { box-sizing: border-box; width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--ovk-line); background: var(--ovk-input); color: var(--ovk-text); font: inherit; font-size: 16px; resize: vertical; }
+

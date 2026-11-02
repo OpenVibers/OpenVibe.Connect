@@ -109,7 +109,7 @@ ${modeChoices(values.mode || 'owner', staff)}
 </fieldset>
 <label class="cn-field"><span>People (for "the people you name")</span><input name="named" maxlength="2000" value="${esc(values.named || '')}" placeholder="sam, riley" autocapitalize="none" autocomplete="off" spellcheck="false"><small>OpenVibe usernames, separated by commas</small></label>
 <button class="cn-btn" type="submit">${kit.icon('plus')} Make the share</button>
-<p class="cn-fine">Every visitor signs in with OpenVibe first. Public shares, open to anyone, come once the abuse check is in.</p>
+<p class="cn-fine">Every visitor signs in with OpenVibe first. Public shares, open to anyone, come once the abuse check is in. Seen a share that tricks people? <a href="/report">Report it</a>.</p>
 </form>`;
 }
 
@@ -285,7 +285,38 @@ function grantDenied({ share, viewer }) {
     return `<div class="cn-wrap cn-page cn-narrow"><header class="cn-head"><span class="cn-state is-closed"><i aria-hidden="true"></i>Not for you</span>
 <h1>You can't open ${esc(share.host)}</h1>
 <p>${esc(share.owner_username)} has not let ${viewer && viewer.username ? `@${esc(viewer.username)}` : 'this account'} in. Ask them to add your OpenVibe username to the share.</p></header>
-<p><a class="cn-btn cn-btn-quiet" href="/auth/logout?next=${encodeURIComponent(`/grant?share=${share.id}`)}">Use another account</a></p></div>`;
+<p><a class="cn-btn cn-btn-quiet" href="/auth/logout?next=${encodeURIComponent(`/grant?share=${share.id}`)}">Use another account</a></p>
+<p class="cn-fine"><a href="/report?host=${encodeURIComponent(share.host)}">Report this share</a></p></div>`;
+}
+
+/**
+ * The report form (CON-9 v0): anyone, about any share, by its address. What a reporter writes reaches OpenVibe staff;
+ * the share's owner is not told who reported.
+ */
+function reportForm({ host = '', values = {}, error = null, reasons = {}, signedIn = false } = {}) {
+    const picked = values.reason || '';
+    return `<div class="cn-wrap cn-page cn-narrow"><header class="cn-head"><h1>Report a share</h1>
+<p>Tell OpenVibe about a share that tricks people, spreads harm or breaks the law. Staff read every report and can close the share. Its owner is not told who reported it.</p></header>
+${error ? `<p class="cn-error" role="alert">${esc(error)}</p>` : ''}
+<form class="cn-form" method="post" action="/report">
+<label class="cn-field"><span>The share's address</span><input name="host" required maxlength="200" value="${esc(values.host || host)}" placeholder="name--someone.openvibe.website" autocapitalize="none" autocomplete="off" spellcheck="false"></label>
+<fieldset class="cn-modes"><legend>What is wrong</legend>
+${Object.entries(reasons).map(([k, v]) => `<label><input type="radio" name="reason" value="${esc(k)}"${picked === k ? ' checked' : ''} required> <span>${esc(v)}</span></label>`).join('\n')}
+</fieldset>
+<label class="cn-field"><span>What you saw <small>(optional, up to 2,000 characters)</small></span><textarea name="details" maxlength="2000" rows="4">${esc(values.details || '')}</textarea></label>
+<button class="cn-btn" type="submit">${kit.icon('flag')} Send the report</button>
+<p class="cn-fine">${signedIn ? 'The report keeps your OpenVibe account so staff can follow up; your address is never stored.' : 'Nothing about you is stored with the report: no account, no address.'} A copyright claim also goes through <a href="/dmca">the DMCA page</a>.</p>
+</form></div>`;
+}
+
+/** The staff queue (CON-9 v0): open reports, newest first; close the share or dismiss the report. */
+function reportsAdmin({ reports = [], reasons = {}, notice = null, now = Date.now() } = {}) {
+    const rows = reports.map((r) => `<li class="cn-report"><div class="cn-report-head"><a href="https://${esc(r.host)}" rel="noopener noreferrer nofollow" target="_blank"><b>${esc(r.host)}</b></a><span>@${esc(r.owner_username)} · ${esc(r.mode)} · ${r.share_status === 'active' ? 'open' : 'closed'}${r.open_for_share > 1 ? ` · ${esc(r.open_for_share)} reports` : ''}</span></div>
+<p><b>${esc(reasons[r.reason] || r.reason)}</b> · ${esc(ago(r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at, now))}${r.signed_in ? ' · signed in' : ''}</p>${r.details ? `<blockquote>${esc(r.details)}</blockquote>` : ''}
+<div class="cn-report-acts">${r.share_status === 'active' ? `<form method="post" action="/admin/reports/${esc(r.id)}/close"><button class="cn-btn cn-btn-bad" type="submit">${kit.icon('close')} Close the share</button></form>` : ''}<form method="post" action="/admin/reports/${esc(r.id)}/dismiss"><button class="cn-btn cn-btn-quiet" type="submit">Dismiss</button></form></div></li>`).join('');
+    return `<div class="cn-wrap cn-page"><header class="cn-head"><h1>Reports</h1><p>Open reports about shares, newest first. Closing a share settles every open report on it; its address then says it was closed after a report.</p></header>
+${notice ? `<p class="cn-notice" role="status">${esc(notice)}</p>` : ''}
+${reports.length ? `<ol class="cn-reports">${rows}</ol>` : '<p class="cn-empty">No open reports.</p>'}</div>`;
 }
 
 function message({ title, text, link = null }) {
@@ -294,4 +325,4 @@ function message({ title, text, link = null }) {
 
 function notFound() { return message({ title: 'Not found', text: 'There is no page here.', link: { href: '/', label: 'OpenVibe Connect' } }); }
 
-module.exports = { home, sharePage, grantDenied, message, notFound, MODE_TEXT, fmtBytes, ago, until, requestRow, size };
+module.exports = { home, sharePage, grantDenied, reportForm, reportsAdmin, message, notFound, MODE_TEXT, fmtBytes, ago, until, requestRow, size };

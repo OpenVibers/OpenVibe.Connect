@@ -42,6 +42,11 @@ only ever connects to `localhost` on the port you gave it.
 Public shares (no sign-in) come once the abuse check and openvibe.website's entry in the Public Suffix List are in
 (ADR-057, CON-9 and CON-21). Changing who can open a share signs everyone out of it.
 
+Anyone can report a share at [/report](https://connect.openvibe.website/report) (CON-9 v0): its address, what is
+wrong and what they saw. OpenVibe staff read the open reports at `/admin/reports` and can close a share; its computer
+is disconnected and its address then says it was closed after a report. A report keeps the reporter's account only
+when they were signed in, never an address.
+
 ## API
 
 With a person's OpenVibe token as a Bearer (or the session on connect.openvibe.website):
