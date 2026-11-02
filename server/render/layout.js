@@ -50,8 +50,9 @@ function layout(o) {
     const canonical = o.canonical === undefined ? `${String(config.baseUrl).replace(/\/+$/, '')}${pathNow.split('?')[0]}` : o.canonical;
     const navbar = {
         service: 'connect',
-        // connect.openvibe.website reads as OpenVibe.Website by its host; the brand says Connect.
-        brand: { tld: 'website', tldLabel: 'Connect' },
+        // Connect.OpenVibe.Website, the way the navbar names every product on a subdomain (Bench.OpenVibe.Services).
+        // With tldLabel 'Connect' the host's own "connect" was added in front: "Connect.OpenVibe.Connect" (11-02).
+        brand: { sub: 'connect', tld: 'website' },
         apiBase: NETWORK_URL,
         links: NAV.map((l) => ({ ...l, active: l.href === active || (l.href !== '/' && pathNow.startsWith(`${l.href}/`)) })),
         appBar: [
