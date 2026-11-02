@@ -1,0 +1,31 @@
+[Unit]
+Description=OpenVibe Connect — your computer, on the web, privately (connect.openvibe.website and every <name>--<user>.openvibe.website)
+# Network (sign-in, JWKS, account events) should be up first, but Connect degrades honestly without it: connected
+# shares keep passing requests for people already let in, and sign-in waits for the signing key (see /api/ready).
+After=network.target postgresql.service pgbouncer.service valkey-server.service
+Wants=openvibe-network.service postgresql.service pgbouncer.service valkey-server.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/openvibe.connect
+EnvironmentFile=/etc/openvibe/connect.env
+Environment=NODE_ENV=production
+Environment=PORT=5240
+Environment=HOST=127.0.0.1
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env node /opt/openvibe.connect/server/index.js
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+# In-flight requests get the 10 s drain; connected computers reconnect to the next process by themselves.
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# Connect's own database is PostgreSQL on the host's data role; the code tree stays read-only.
+
+[Install]
+WantedBy=multi-user.target

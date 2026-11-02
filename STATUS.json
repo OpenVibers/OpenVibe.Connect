@@ -1,0 +1,44 @@
+{
+  "repository": "OpenVibers/OpenVibe.Connect",
+  "version": "0.1.0",
+  "stage": "product",
+  "code": true,
+  "plan": "Website Connect v0 (plan 2026-10-28 \u00a75.9b, ADR-057 reviewed 2026-11-02): share one port on your computer at https://<name>--<user>.openvibe.website behind OpenVibe sign-in",
+  "runtime": "node 22, express 4, ws 8, PostgreSQL 18 (openvibe-sdk/db, async)",
+  "port": "5240",
+  "domain": "connect.openvibe.website",
+  "contracts": "openvibe-contracts v0.278.0",
+  "sdk": "openvibe-sdk v0.82.0",
+  "shared": "openvibe-shared v4.105.0",
+  "packages": [
+    "openvibe-contracts v0.278.0",
+    "openvibe-sdk v0.82.0",
+    "openvibe-shared v4.105.0"
+  ],
+  "summary": "OpenVibe Connect puts one port on a person's computer on the web at its own HTTPS address, behind OpenVibe sign-in. A one-file client (Node 22, no dependencies) opens one outgoing WebSocket through Cloudflare and carries requests to localhost: HTTP with streaming both ways, server-sent events and WebSocket upgrades. Every visitor signs in and must be allowed by the share's policy (only the owner, named people, or anyone signed in); the share host keeps its own host-only signed cookie. Nothing that passes through is stored.",
+  "works": [
+    "Shares at <name>--<user>.openvibe.website, never colliding with Space sites; five per person; a closed share keeps its address",
+    "The client: hello with a hashed-at-rest key, streams both ways with backpressure, SSE, WebSocket upgrades as a byte pipe, reconnect, takeover, stop on a bad key",
+    "The gate: /grant with OpenVibe sign-in, one-time codes, __Host-ovc bound to the share and its policy version",
+    "What the app gets: localhost Host, X-Forwarded-Host, X-OpenVibe-User/Subject; Set-Cookie Domain removed; no CDN caching",
+    "Pages (front door, your shares, a share's page), the API for a person's token, account export/deletion",
+    "Checks on PGlite and PostgreSQL, including a share end to end through the real client"
+  ],
+  "notYet": [
+    "Public shares (abuse check CON-9, Public Suffix List CON-21)",
+    "TCP/UDP shares (CON-11/12)",
+    "Custom domains (CON-7)",
+    "The QUIC edge (CON-3)",
+    "The private mesh (CON-13)",
+    "Durable webhooks (CON-15)",
+    "The OpenVibe Node plugin (CON-4)"
+  ],
+  "capabilitiesRegistered": false,
+  "serviceManifestRegistered": false,
+  "deployed": false,
+  "placeholderInSites": false,
+  "seed": "none",
+  "features": [],
+  "deployment": "ovhost connect (port 5240, drill 15240), unit openvibe-connect, database ov_connect",
+  "updated": "2026-11-02"
+}
