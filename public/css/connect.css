@@ -43,8 +43,12 @@
 .cn-pick { width: min(100%, 340px); margin: 0 auto; display: grid; gap: 8px; }
 .cn-pick-row { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--ovk-line); background: var(--ovk-panel); font-size: 14px; color: var(--ovk-muted); }
 .cn-pick-row i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--ovk-line); flex: none; }
-.cn-pick-row.is-on { color: var(--ovk-text); border-color: color-mix(in srgb, var(--room-accent) 55%, var(--ovk-line)); }
-.cn-pick-row.is-on i { border-color: var(--room-accent); background: radial-gradient(circle, var(--room-accent) 0 4px, transparent 5px); }
+.cn-pick-row.is-on, .cn-pick-row[data-ov-ghost-on] { color: var(--ovk-text); border-color: color-mix(in srgb, var(--room-accent) 55%, var(--ovk-line)); }
+.cn-pick-row.is-on i, .cn-pick-row[data-ov-ghost-on] i { border-color: var(--room-accent); background: radial-gradient(circle, var(--room-accent) 0 4px, transparent 5px); }
+/* While the ghost cursor is choosing, only its choice looks chosen. */
+.cn-pick:has([data-ov-ghost-on]) .cn-pick-row.is-on:not([data-ov-ghost-on]) { color: var(--ovk-muted); border-color: var(--ovk-line); }
+.cn-pick:has([data-ov-ghost-on]) .cn-pick-row.is-on:not([data-ov-ghost-on]) i { border-color: var(--ovk-line); background: none; }
+.cn-pick-row { transition: border-color .2s ease, color .2s ease; }
 .cn-pick-names { display: flex; gap: 6px; padding-left: 40px; }
 .cn-pick-names b { padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; background: color-mix(in srgb, var(--room-accent) 16%, transparent); color: var(--room-strong); }
 

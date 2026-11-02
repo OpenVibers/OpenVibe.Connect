@@ -85,6 +85,7 @@ function layout(o) {
 <link rel="stylesheet" href="${esc(ovServe.url('room.css'))}">
 <link rel="stylesheet" href="${esc(ovServe.url('showcase.css'))}">
 <link rel="stylesheet" href="${asset('css/connect.css')}">
+<script src="${asset('js/connect.js')}" defer></script>
 <script src="${esc(ovServe.url('kit-web.js'))}" defer></script>
 <script src="${esc(ovServe.url('motion.js'))}" defer></script>
 <meta name="ov-boost" content="connect@${esc(RELEASE)}">`,

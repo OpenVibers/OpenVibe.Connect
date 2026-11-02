@@ -52,7 +52,8 @@ function phone() {
 }
 
 function picker(mode = 'named') {
-    return `<div class="cn-pick" role="img" aria-label="Choosing who can open a share">${Object.entries(MODE_TEXT).map(([k, v]) => `<span class="cn-pick-row${k === mode ? ' is-on' : ''}"><i></i>${esc(v)}</span>`).join('')}
+    // The ghost cursor (openvibe-shared 4.106.0 motion.js) walks the three choices; the server draws "named" chosen.
+    return `<div class="cn-pick" role="img" aria-label="Choosing who can open a share" data-ov-ghost>${Object.entries(MODE_TEXT).map(([k, v], i) => `<span class="cn-pick-row${k === mode ? ' is-on' : ''}" data-ov-ghost-step="${i + 1}"><i></i>${esc(v)}</span>`).join('')}
 <span class="cn-pick-names"><b>@sam</b><b>@riley</b></span></div>`;
 }
 
@@ -216,9 +217,9 @@ ${modeChoices(share.mode, staff)}
 <p class="cn-back"><a href="/">${kit.icon('back')} Your shares</a></p>
 ${notice ? `<p class="cn-notice" role="status">${esc(notice)}</p>` : ''}
 ${error ? `<p class="cn-error" role="alert">${esc(error)}</p>` : ''}
-<header class="cn-head"><span class="cn-state ${closed ? 'is-closed' : connected ? 'is-on' : 'is-off'}"><i aria-hidden="true"></i>${esc(state)}</span>
+<header class="cn-head" data-cn-share="${esc(share.id)}"><span class="cn-state ${closed ? 'is-closed' : connected ? 'is-on' : 'is-off'}" role="status" aria-live="polite"><i aria-hidden="true"></i><span>${esc(state)}</span></span>
 <h1>${closed ? esc(share.host) : `<a href="${esc(share.url)}">${esc(share.host)}</a>`}</h1>
-<p>${esc(stateText)}</p></header>
+<p data-cn-line>${esc(stateText)}</p></header>
 ${key ? keyBlock(share, key, baseUrl) : ''}
 <dl class="cn-facts">
 <div><dt>Who can open it</dt><dd>${esc(MODE_TEXT[share.mode] || share.mode)}${share.mode === 'named' && share.named.length ? `: ${share.named.map((n) => `@${esc(n)}`).join(', ')}` : ''}</dd></div>
