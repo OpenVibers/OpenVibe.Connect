@@ -93,7 +93,7 @@ page that names a brand (PayPal, Google, a bank…), or one with an urgent "veri
 like one becomes an automatic report for staff; Connect never closes a share by itself here, and nothing of the page is
 kept beyond the report's one line. An ordinary sign-in page for your own app is not reported.
 
-### API keys for programs (CON-16 v0)
+### API keys for programs (CON-16)
 
 A program can call a share without signing in: on the share's page, make an **API key** (a name and how many requests a
 minute it may make, 60 by default), and send it as `Authorization: Bearer ovsk_…`. That is how a model on your
@@ -112,8 +112,17 @@ curl -H "Authorization: Bearer ovsk_…" https://llm--you.openvibe.website/v1/mo
   `Retry-After: 60`; the share's own limits still apply.
 - Only the key's hash is kept and it is shown once. At most ten live keys a share; revoking one stops it at once, and
   closing the share stops them all. WebSocket upgrades take a key too.
-- API: `GET`, `POST /api/v1/shares/:id/api-keys` (`{ name, per_minute }` → `{ api_key, key }`, the key once) and
-  `DELETE /api/v1/shares/:id/api-keys/:sak_id`. Cases: `test/api-keys.test.js`.
+- **A daily quota (v1).** A key may also have a number of requests a day (`per_day`, optional), counted in UTC days and
+  kept in the database, so a restart does not reset it. Over it, a key gets 429 `key_daily_quota` with `Retry-After`
+  until midnight UTC.
+- **What each key did today (v1).** The share page and the list show each key's requests today (against its quota)
+  and what it used: the MCP tools it called (JSON-RPC `tools/call`, by name, a batch counting each) and the models it
+  asked for (an OpenAI- or Ollama-style `"model"` on a model path such as `/v1/chat/completions` or `/api/generate`).
+  The edge reads the first 64 KB of a key's JSON POST for those names; names and counts are kept, never arguments,
+  prompts or bodies.
+- API: `GET`, `POST /api/v1/shares/:id/api-keys` (`{ name, per_minute, per_day }` → `{ api_key, key }`, the key once;
+  the list adds `today` and `used: [{ what, n }]`) and `DELETE /api/v1/shares/:id/api-keys/:sak_id`. Cases:
+  `test/api-keys.test.js`, `test/api-key-quotas.test.js`.
 
 ## API
 

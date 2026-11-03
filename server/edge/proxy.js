@@ -36,6 +36,8 @@ function privateCache(value) {
     return ['private', ...parts].join(', ');
 }
 
+const AUDIT_MAX = 64 * 1024;
+
 function createProxy({ config, shares, tunnels, gate, apiKeys = null, log = console, now = () => Date.now() }) {
     // The last requests through each share, for its owner's page (CON-8 v0; memory only).
     const inspector = require('./inspector').createInspector({ now });
@@ -192,8 +194,10 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, log = cons
         if (bearer && apiKeys) {
             const key = await apiKeys.check(share, bearer[1]);
             if (!key) { sendProblem(req, res, 401, 'bad_key', 'That key does not open this share', 'The API key is wrong, revoked, or for another share.', { json: { error: 'bad_key' } }); return null; }
-            who = { subject: `key:${key.id}`, username: `key: ${key.name}`, apiKey: key.id };
+            who = { subject: `key:${key.id}`, username: `key: ${key.name}`, apiKey: key.id, key };
             if (apiKeys.overRate(key)) { visit(share, who, { denied: true }); sendProblem(req, res, 429, 'key_rate_limited', 'Too many requests', `This key allows ${key.per_minute} requests a minute.`, { headers: { 'retry-after': '60' } }); return null; }
+            // Its daily quota (CON-16 v1), in UTC days: spent, it opens again at midnight UTC.
+            if (await apiKeys.overDay(key)) { visit(share, who, { denied: true }); sendProblem(req, res, 429, 'key_daily_quota', 'Over today\'s quota', `This key allows ${key.per_day} requests a day. It opens again at midnight UTC.`, { headers: { 'retry-after': String(apiKeys.untilTomorrow()) }, json: { per_day: key.per_day } }); return null; }
         } else {
             const { ours } = gate.splitCookies(req.headers.cookie);
             who = ours ? gate.verify(ours, share) : null;
@@ -339,7 +343,12 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, log = cons
         headTimer.unref();
 
         tunnel.send({ t: 'req', id, method: req.method, path: url, headers: forwardHeaders(req, share, who, port) });
+        // What a key's request used (CON-16 v1): the first 64 KB of a JSON POST are read for an MCP tools/call name or a
+        // model name, counted per key and day; the body itself is not kept.
+        const audited = who.key && apiKeys && req.method === 'POST' && /json/i.test(String(req.headers['content-type'] || '')) ? [] : null;
+        let auditedBytes = 0;
         req.on('data', (chunk) => {
+            if (audited && auditedBytes < AUDIT_MAX) { audited.push(chunk.subarray(0, AUDIT_MAX - auditedBytes)); auditedBytes += Math.min(chunk.length, AUDIT_MAX - auditedBytes); }
             received += chunk.length;
             addBytes(share, 'in', chunk.length);
             rec.in += chunk.length;
@@ -351,7 +360,10 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, log = cons
             tunnel.data(id, chunk);
             if (tunnel.congested) { req.pause(); tunnel.drained().then(() => req.resume()); }
         });
-        req.on('end', () => { if (!finished) tunnel.end(id); });
+        req.on('end', () => {
+            if (!finished) tunnel.end(id);
+            if (audited && audited.length) { try { apiKeys.audit(who.key, url, Buffer.concat(audited).toString('utf8')); } catch { /* the audit never stops a request */ } }
+        });
         res.on('close', () => { if (!finished && !res.writableFinished) { finished = true; clearTimeout(headTimer); tunnel.abort(id, 'visitor_gone'); } });
     }
 

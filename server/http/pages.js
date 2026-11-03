@@ -171,7 +171,7 @@ function createPageRoutes(ctx) {
         const share = await mine(req, res);
         if (!share) return undefined;
         try {
-            const made = await apiKeys.create(owner(req), share, { name: req.body.name, per_minute: req.body.per_minute ? Number(req.body.per_minute) : undefined });
+            const made = await apiKeys.create(owner(req), share, { name: req.body.name, per_minute: req.body.per_minute ? Number(req.body.per_minute) : undefined, per_day: req.body.per_day ? Number(req.body.per_day) : null });
             res.set('Cache-Control', 'no-store');
             return showShare(req, res, share, { notice: 'API key made. Copy it now: it is not shown again.', newApiKey: made }, 201);
         } catch (err) {

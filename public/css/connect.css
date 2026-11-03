@@ -142,6 +142,11 @@
 .cn-hook-main code { overflow-wrap: anywhere; }
 .cn-hook-main small { color: var(--ovk-muted); font-size: 13px; overflow-wrap: anywhere; }
 .cn-hook-main small b { color: var(--ovk-text); }
+/* A key's use today (CON-16 v1): its count against the quota, then the tools and models it used, inline. */
+.cn-keyuse { display: grid; gap: 2px; }
+.cn-hooks .cn-keyuse-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 13px; }
+.cn-hooks .cn-keyuse-list li { display: inline; padding: 0; border: 0; border-radius: 0; background: none; color: var(--ovk-muted); }
+.cn-muted { color: var(--ovk-muted); }
 .cn-hook-add { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; }
 .cn-hook-add .cn-field { flex: 1 1 200px; }
 /* Which computer serves it (CON-4): the owner's machines, one row each with its button; the bound one's commands. */
