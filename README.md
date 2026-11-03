@@ -50,7 +50,8 @@ misses nothing (CON-15, ADR-057 decision 7):
 - Connect keeps the method, the provider's headers (`content-type`, `user-agent`, `x-…`, `stripe-signature`,
   `svix-…`, `webhook-…`; never cookies, authorization or forwarding headers) and the body. It publishes only a
   pointer, `connect.hook.received`, to OpenVibe.Events, in the same transaction.
-- Events delivers that pointer back to Connect's own subscription, retried for about seven days. Connect hands the
+- The moment the computer connects, Connect hands it every webhook that waited, oldest first. Events also delivers the
+  pointer back to Connect's own subscription, retried for about seven days, which finds it settled. Connect hands the
   webhook to your app with `x-openvibe-hook` and `x-openvibe-event-id` (dedupe on it). Your app's answer below 500 settles it, and
   its body is dropped. While the computer is offline, or the app answers 5xx, Connect says 503 and Events tries again.
 - Nobody signs in to send a webhook, so check the provider's own signature in your app.

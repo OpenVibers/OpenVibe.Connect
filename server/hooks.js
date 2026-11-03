@@ -11,8 +11,10 @@
  *   create(owner, share, { path, label }) → hook          list(shareId) → hooks       remove(owner, id)
  *   get(id)                                                receive(hook, { method, headers, body }) → { ref }
  *   request(ref) → the stored request with its hook       settle(ref, status)         sweep() → rows removed
+ *   waiting(shareId) → its undelivered requests, oldest first (handed over at once when its computer connects)
  */
 const crypto = require('crypto');
+const { ids } = require('openvibe-contracts');
 
 const HOOK_ID = /^hk_[0-9A-HJKMNP-TV-Z]{26}$/;
 const REF_RE = /^hb_[A-Za-z0-9_-]{16,64}$/;
@@ -96,13 +98,16 @@ function createHooks(s, { config, outbox = null, now = () => Date.now() }) {
         const contentType = (kept.find(([k]) => k === 'content-type') || [null, null])[1];
         const ref = `hb_${crypto.randomBytes(18).toString('base64url')}`;
         const at = new Date(now());
+        // The event's id is chosen here and kept with the request: the app sees the same x-openvibe-event-id however
+        // the webhook reaches it (handed over on connect, or Events' retry).
+        const eventId = ids.newId('event');
         await s.tx(async (t) => {
-            await t.exec('INSERT INTO hook_requests (id, hook_id, method, headers, body, received_at, expires_at) VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)',
-                [ref, hook.id, method, JSON.stringify(kept), buf, at.toISOString(), new Date(at.getTime() + KEEP_MS).toISOString()]);
+            await t.exec('INSERT INTO hook_requests (id, hook_id, method, headers, body, received_at, expires_at, event_id) VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8)',
+                [ref, hook.id, method, JSON.stringify(kept), buf, at.toISOString(), new Date(at.getTime() + KEEP_MS).toISOString(), eventId]);
             await t.exec('UPDATE share_hooks SET received = received + 1, last_received_at = $2 WHERE id = $1', [hook.id, at.toISOString()]);
             if (outbox) {
                 await outbox.emitIn(t, {
-                    event_type: 'connect.hook.received', version: 1, source: 'connect',
+                    event_id: eventId, event_type: 'connect.hook.received', version: 1, source: 'connect',
                     actor: { type: 'service', id: 'connect' }, subject: { type: 'connect.hook', id: hook.id },
                     visibility: 'internal', priority: 'important',
                     payload: { hook_id: hook.id, share_id: hook.share_id, body_ref: ref, method, size: buf.length, content_type: contentType ? String(contentType).slice(0, 200) : null, received_at: at.toISOString() },
@@ -119,7 +124,17 @@ function createHooks(s, { config, outbox = null, now = () => Date.now() }) {
         const r = await db.maybe(`SELECT r.*, h.share_id, h.local_path, h.status AS hook_status FROM hook_requests r JOIN share_hooks h ON h.id = r.hook_id
                                    WHERE r.id = $1`, [ref]);
         if (!r || r.hook_status !== 'active' || r.delivered_at || new Date(r.expires_at).getTime() <= now()) return null;
-        return { ref: r.id, hookId: r.hook_id, shareId: r.share_id, path: r.local_path, method: r.method, headers: Array.isArray(r.headers) ? r.headers : [], body: r.body };
+        return { ref: r.id, hookId: r.hook_id, shareId: r.share_id, path: r.local_path, method: r.method, headers: Array.isArray(r.headers) ? r.headers : [], body: r.body, eventId: r.event_id || null };
+    }
+
+    /** A share's webhooks still waiting for its computer, oldest first (at most `limit`). */
+    async function waiting(shareId, limit = 100) {
+        const rows = await db.many(`SELECT r.id FROM hook_requests r JOIN share_hooks h ON h.id = r.hook_id
+                                     WHERE h.share_id = $1 AND h.status = 'active' AND r.delivered_at IS NULL AND r.expires_at > $2
+                                     ORDER BY r.received_at LIMIT $3`, [shareId, new Date(now()).toISOString(), limit]);
+        const out = [];
+        for (const r of rows) { const q = await request(r.id); if (q) out.push(q); }
+        return out;
     }
 
     /** The computer's app answered: the request is delivered (its body is dropped) and the hook counts it. */
@@ -136,7 +151,7 @@ function createHooks(s, { config, outbox = null, now = () => Date.now() }) {
         return r.length;
     }
 
-    return { get, list, create, remove, receive, request, settle, sweep, KEEP_MS, MAX_BODY };
+    return { get, list, create, remove, receive, request, waiting, settle, sweep, KEEP_MS, MAX_BODY };
 }
 
 module.exports = { createHooks, HookError, keepHeaders, HOOK_ID, METHODS, MAX_BODY, KEEP_MS };
