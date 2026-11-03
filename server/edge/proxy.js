@@ -37,8 +37,9 @@ function privateCache(value) {
 }
 
 const AUDIT_MAX = 64 * 1024;
+const PRM = '/.well-known/oauth-protected-resource';
 
-function createProxy({ config, shares, tunnels, gate, apiKeys = null, log = console, now = () => Date.now() }) {
+function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = null, log = console, now = () => Date.now() }) {
     // The last requests through each share, for its owner's page (CON-8 v0; memory only).
     const inspector = require('./inspector').createInspector({ now });
     const domain = config.shares.domain;
@@ -49,6 +50,8 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, log = cons
 
     const isShareHost = (host) => Boolean(parseHost(host, domain));
     const today = () => new Date(now()).toISOString().slice(0, 10);
+    const shareUrl = (share) => share.url || `https://${share.host}`;
+    const resourceMetadata = (share) => `${shareUrl(share)}${PRM}`;
     const grantUrl = (share, next) => `${config.baseUrl}/grant?share=${encodeURIComponent(share.id)}&next=${encodeURIComponent(gate.safeNext(next))}`;
 
     async function lookup(host) {
@@ -107,7 +110,7 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, log = cons
             const name = String(pairs[i]).toLowerCase();
             if (DROP_IN.test(name)) continue;
             // An API key (CON-16) is for the edge alone: the app never sees it, only X-OpenVibe-Subject key:<id>.
-            if (who.apiKey && name === 'authorization') continue;
+            if ((who.apiKey || who.oauth) && name === 'authorization') continue;
             if (HOP.has(name) && !(raw && (name === 'connection' || name === 'upgrade'))) continue;
             out.push([name, String(pairs[i + 1])]);
         }
@@ -198,6 +201,11 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, log = cons
             if (apiKeys.overRate(key)) { visit(share, who, { denied: true }); sendProblem(req, res, 429, 'key_rate_limited', 'Too many requests', `This key allows ${key.per_minute} requests a minute.`, { headers: { 'retry-after': '60' } }); return null; }
             // Its daily quota (CON-16 v1), in UTC days: spent, it opens again at midnight UTC.
             if (await apiKeys.overDay(key)) { visit(share, who, { denied: true }); sendProblem(req, res, 429, 'key_daily_quota', 'Over today\'s quota', `This key allows ${key.per_day} requests a day. It opens again at midnight UTC.`, { headers: { 'retry-after': String(apiKeys.untilTomorrow()) }, json: { per_day: key.per_day } }); return null; }
+        } else if (oauth && /^Bearer\s+ovat_/i.test(String(req.headers.authorization || ''))) {
+            // An MCP client signed in with OpenVibe (CON-16, server/oauth.js): the person who consented, for this share.
+            const g = await oauth.check(share, String(req.headers.authorization).replace(/^Bearer\s+/i, '').trim());
+            if (!g) { sendProblem(req, res, 401, 'invalid_token', 'Sign in again', 'That sign-in is out of date or was signed out. The app should sign in again.', { json: { error: 'invalid_token' }, headers: { 'www-authenticate': `Bearer error="invalid_token", resource_metadata="${resourceMetadata(share)}"` } }); return null; }
+            who = { subject: g.subject, username: g.username, oauth: g.id, client: g.client };
         } else {
             const { ours } = gate.splitCookies(req.headers.cookie);
             who = ours ? gate.verify(ours, share) : null;
@@ -205,7 +213,8 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, log = cons
         if (!who) {
             const url = grantUrl(share, parsedPath);
             if (wantsHtml(req)) { res.writeHead(302, { location: url, 'cache-control': 'no-store', 'cloudflare-cdn-cache-control': 'no-store' }); res.end(); return null; }
-            sendProblem(req, res, 401, 'sign_in_required', 'Sign in first', 'This share asks every visitor to sign in with OpenVibe.', { json: { sign_in: url } });
+            // A program is told where to sign in: an MCP client follows resource_metadata to Connect's OAuth (RFC 9728).
+            sendProblem(req, res, 401, 'sign_in_required', 'Sign in first', 'This share asks every visitor to sign in with OpenVibe.', { json: { sign_in: url }, headers: oauth ? { 'www-authenticate': `Bearer resource_metadata="${resourceMetadata(share)}"` } : {} });
             return null;
         }
         if (overRate(share)) { visit(share, who, { denied: true }); sendProblem(req, res, 429, 'rate_limited', 'Too many requests', 'This share had too many requests in the last minute. Try again shortly.', { headers: { 'retry-after': '30' } }); return null; }
@@ -269,6 +278,17 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, log = cons
             return sendPage(res, ok ? 200 : 429, ok ? 'We will tell you' : 'Too many waiting', ok
                 ? `You get one OpenVibe notification when ${share.owner_username}'s computer connects again. This page keeps asking too.`
                 : 'Too many people are waiting on this share already. This page keeps asking every 10 seconds.', { refresh: 10 });
+        }
+        // MCP OAuth (CON-16): the share says who signs its programs in (RFC 9728), to anyone, before the gate.
+        if (oauth && (path === PRM || path.startsWith(`${PRM}/`))) {
+            const headers = { 'content-type': 'application/json', 'cache-control': 'public, max-age=300', 'access-control-allow-origin': '*', 'access-control-allow-headers': 'mcp-protocol-version' };
+            if (req.method === 'OPTIONS') { res.writeHead(204, headers); return res.end(); }
+            res.writeHead(200, headers);
+            return res.end(JSON.stringify({
+                resource: `${shareUrl(share)}${path.slice(PRM.length)}`, resource_name: share.host,
+                authorization_servers: [config.baseUrl], bearer_methods_supported: ['header'], scopes_supported: ['share'],
+                resource_documentation: `${config.baseUrl}/#mcp`,
+            }));
         }
         if (path === '/__ovc/signout') {
             return sendPage(res, 200, 'Signed out of this share', `You are signed out of ${share.host}. Your OpenVibe sign-in is untouched.`, { headers: { 'set-cookie': gate.clearCookieHeader() } });

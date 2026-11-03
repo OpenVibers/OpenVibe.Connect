@@ -24,7 +24,11 @@ const TABLES = [
         columns: ['id', 'share_id', 'label', 'local_path', 'status', 'created_at', 'removed_at', 'received', 'delivered', 'last_received_at', 'last_delivered_at', 'last_status'] },
     // API keys on a person's shares (CON-16): the export names each key, its start and its rate, never its hash.
     { table: 'share_api_keys', subject: 'owner_subject', value: (usr) => usr, file: 'api-keys.json', erase: 'delete',
-        columns: ['id', 'share_id', 'name', 'key_prefix', 'per_minute', 'created_at', 'last_used_at', 'revoked_at'] },
+        columns: ['id', 'share_id', 'name', 'key_prefix', 'per_minute', 'per_day', 'created_at', 'last_used_at', 'revoked_at'] },
+    // MCP clients a person signed in to shares (CON-16 OAuth): which app, which share, when; never a token or its hash.
+    // Erasing deletes them, so those apps are signed out of every share at once.
+    { table: 'share_oauth_tokens', subject: 'subject', value: (usr) => usr, file: 'mcp-sign-ins.json', erase: 'delete',
+        columns: ['id', 'share_id', 'client_id', 'username', 'created_at', 'last_used_at', 'revoked_at'] },
     {
         table: 'shares', subject: 'owner_subject', value: (usr) => usr, file: 'shares.json', erase: 'delete',
         columns: ['id', 'owner_username', 'label', 'host', 'local_port', 'mode', 'named', 'status', 'policy_version', 'key_prefix', 'note',

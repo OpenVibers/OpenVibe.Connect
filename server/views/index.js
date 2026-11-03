@@ -279,6 +279,39 @@ ${rows}
 }
 
 /**
+ * MCP clients (CON-16): the share's address works as an MCP server URL in Claude or any MCP client, which signs the
+ * person in with OpenVibe (OAuth). The owner sees each app and person signed in, and signs one out.
+ */
+function mcpBlock(share, sessions, now) {
+    const url = `${share.url || `https://${share.host}`}/mcp`;
+    const rows = sessions.length ? `<ul class="cn-hooks">${sessions.map((x) => `<li><div class="cn-hook-main"><b>${esc(x.client)}</b>
+<small>as ${x.username ? `@${esc(x.username)}` : 'a person'} · signed in ${esc(ago(x.created_at, now))} · ${x.last_used_at ? `last used ${esc(ago(x.last_used_at, now))}` : 'not used yet'}</small></div>
+<form method="post" action="/shares/${esc(share.id)}/oauth/${esc(x.id)}/revoke"><button class="cn-btn cn-btn-quiet" type="submit">${kit.icon('close')} Sign out</button></form></li>`).join('')}</ul>`
+        : '<p class="cn-empty">No app has signed in yet.</p>';
+    return `<section class="cn-hooks-sec" id="mcp" aria-labelledby="cn-mcp-h"><h2 id="cn-mcp-h">Use it from Claude and other MCP clients</h2>
+<p>If this share is an MCP server, add <code>${esc(url)}</code> (or its own path) as a connector in Claude or any MCP client. The app asks the person to sign in with OpenVibe; this share's rule decides who may, and the app gets access to this share only.</p>
+${rows}</section>`;
+}
+
+/** The consent page of an MCP client's sign-in (CON-16): who asks, for which share, as whom. */
+function oauthConsent({ client, share, viewer, fields }) {
+    const hidden = Object.entries(fields).map(([k, v]) => `<input type="hidden" name="${esc(k)}" value="${esc(v)}">`).join('');
+    let to = '';
+    try { to = new URL(fields.redirect_uri).host; } catch { /* checked before */ }
+    return `<div class="cn-wrap cn-page cn-narrow"><header class="cn-head"><h1>Let ${esc(client.name)} use ${esc(share.host)}?</h1>
+<p><b>${esc(client.name)}</b> (it goes back to <code>${esc(to)}</code>) asks to use <b>${esc(share.host)}</b>, shared by ${esc(share.owner_username)}, as ${viewer.username ? `@${esc(viewer.username)}` : 'you'}.</p></header>
+<ul class="cn-fine">
+<li>It can use what this share answers, as you would. Nothing else of your OpenVibe account.</li>
+<li>It stays signed in until the share changes who it lets in, its owner signs it out, or 30 days pass unused.</li>
+<li>Only say yes to an app you just added yourself.</li>
+</ul>
+<form class="cn-form" method="post" action="/oauth/authorize">${hidden}
+<button class="cn-btn" type="submit" name="decision" value="allow">Allow</button>
+<button class="cn-btn cn-btn-quiet" type="submit" name="decision" value="deny">No</button>
+</form></div>`;
+}
+
+/**
  * A key's use today (CON-16 v1): its requests against its daily quota, and the MCP tools and models it used, by count.
  */
 function keyUseToday(k) {
@@ -315,7 +348,7 @@ ${fresh}${rows}
 </form></section>`;
 }
 
-function sharePage({ share, connected, tunnel = null, visits = [], requests = [], key = null, baseUrl, notice = null, error = null, staff = false, machines = [], hooks = [], apiKeys = [], newApiKey = null, now = Date.now() }) {
+function sharePage({ share, connected, tunnel = null, visits = [], requests = [], key = null, baseUrl, notice = null, error = null, staff = false, machines = [], hooks = [], apiKeys = [], newApiKey = null, oauthSessions = [], now = Date.now() }) {
     const closed = share.status !== 'active';
     const state = closed ? 'Closed' : connected ? 'Connected' : 'Not connected';
     const stateText = closed ? `Closed ${ago(share.revoked_at, now)}. The address answers "closed" and stays yours.`
@@ -360,6 +393,7 @@ ${!key && !closed && !share.node ? `<section class="cn-run"><h2>Connect it</h2><
 ${closed ? '' : nodeBlock(share, machines, now)}
 ${closed ? '' : hooksBlock(share, hooks, now)}
 ${closed ? '' : apiKeysBlock(share, apiKeys, newApiKey, now)}
+${closed ? '' : mcpBlock(share, oauthSessions, now)}
 <section aria-labelledby="cn-visits-h"><h2 id="cn-visits-h">Who opened it (7 days)</h2>${visitRows}</section>
 ${closed ? '' : `<section class="cn-inspector" aria-labelledby="cn-reqs-h" data-cn-reqs="${esc(share.id)}"><h2 id="cn-reqs-h">Requests</h2>
 <p class="cn-fine">The last 100 through this share, newest first, added as they happen. Kept in memory only, never written down: no headers, no bodies, and query values show as "…".</p>
@@ -414,4 +448,4 @@ function message({ title, text, link = null }) {
 
 function notFound() { return message({ title: 'Not found', text: 'There is no page here.', link: { href: '/', label: 'OpenVibe Connect' } }); }
 
-module.exports = { home, sharePage, grantDenied, reportForm, reportsAdmin, message, notFound, MODE_TEXT, fmtBytes, ago, until, requestRow, size };
+module.exports = { home, sharePage, grantDenied, oauthConsent, reportForm, reportsAdmin, message, notFound, MODE_TEXT, fmtBytes, ago, until, requestRow, size };
