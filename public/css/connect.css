@@ -132,6 +132,18 @@
 .cn-run { display: grid; gap: 10px; }
 .cn-run h2 { margin: 0; }
 .cn-run a { color: var(--room-strong); }
+/* Webhooks that wait for your computer (CON-15): one row per address, its copy box and counts; the add form. */
+.cn-hooks-sec { display: grid; gap: 10px; }
+.cn-hooks-sec h2 { margin: 0; }
+.cn-hooks-sec > p { margin: 0; color: var(--ovk-muted); }
+.cn-hooks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cn-hooks li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 14px; border-radius: 10px; background: var(--ovk-panel); border: 1px solid var(--ovk-line); }
+.cn-hook-main { display: grid; gap: 4px; min-width: 0; flex: 1 1 260px; }
+.cn-hook-main code { overflow-wrap: anywhere; }
+.cn-hook-main small { color: var(--ovk-muted); font-size: 13px; overflow-wrap: anywhere; }
+.cn-hook-main small b { color: var(--ovk-text); }
+.cn-hook-add { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; }
+.cn-hook-add .cn-field { flex: 1 1 200px; }
 /* Which computer serves it (CON-4): the owner's machines, one row each with its button; the bound one's commands. */
 .cn-node { display: grid; gap: 10px; }
 .cn-node h2 { margin: 0; }

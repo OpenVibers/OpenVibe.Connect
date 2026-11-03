@@ -10,6 +10,8 @@
  *   POST /shares/:id/key       a new key (shown once); the connected computer is disconnected
  *   POST /shares/:id/node      node=nod_… one of your computers serves it (CON-4); node= (empty) lets it go and shows a
  *                              new key once
+ *   POST /shares/:id/hooks     path=&label= a webhook address for it (CON-15)
+ *   POST /shares/:id/hooks/:hook/remove
  *   POST /shares/:id/close     close it: the address answers "closed" from then on
  *   /grant?share=&next=        the gate's sign-in step (server/edge/gate.js): signed in and allowed → back to the
  *                              share host with a one-time code
@@ -21,9 +23,10 @@ const { sameOrigin } = require('./principal');
 const { send } = require('../render/layout');
 const views = require('../views');
 const { ShareError } = require('../shares');
+const { HookError } = require('../hooks');
 
 function createPageRoutes(ctx) {
-    const { config, shares, tunnels, gate, proxy, machines } = ctx;
+    const { config, shares, tunnels, gate, proxy, machines, hooks } = ctx;
     const r = asyncRouter();
     r.use(express.urlencoded({ extended: false, limit: '16kb' }));
     const page = (req, res, o, status = 200) => send(res, status, { viewer: req.viewer, config, path: req.originalUrl, ...o });
@@ -82,11 +85,12 @@ function createPageRoutes(ctx) {
 
     async function showShare(req, res, share, extra = {}, status = 200) {
         const tunnel = tunnels.get(share.id);
-        const [visits, mine] = await Promise.all([
+        const [visits, mine, hookList] = await Promise.all([
             shares.visits(share.id),
             share.status === 'active' ? machines.list(req.viewer.token) : Promise.resolve({ ok: true, machines: [] }),
+            share.status === 'active' ? hooks.list(share.id) : Promise.resolve([]),
         ]);
-        return page(req, res, { title: share.host, body: views.sharePage({ share, connected: Boolean(tunnel), tunnel, visits, requests: ctx.proxy ? ctx.proxy.inspector.list(share.id) : [], baseUrl: config.baseUrl, staff: req.viewer.role === 'admin', machines: mine.ok ? mine.machines : null, ...extra }) }, status);
+        return page(req, res, { title: share.host, body: views.sharePage({ share, connected: Boolean(tunnel), tunnel, visits, requests: ctx.proxy ? ctx.proxy.inspector.list(share.id) : [], baseUrl: config.baseUrl, staff: req.viewer.role === 'admin', machines: mine.ok ? mine.machines : null, hooks: hookList, ...extra }) }, status);
     }
 
     r.get('/shares/:id', async (req, res) => {
@@ -145,6 +149,29 @@ function createPageRoutes(ctx) {
             if (!(err instanceof ShareError)) throw err;
             return showShare(req, res, share, { error: err.message }, err.status || 422);
         }
+    });
+
+    r.post('/shares/:id/hooks', async (req, res) => {
+        if (!guard(req, res)) return undefined;
+        const share = await mine(req, res);
+        if (!share) return undefined;
+        try {
+            const hook = await hooks.create(owner(req), share, { path: req.body.path, label: req.body.label });
+            return showShare(req, res, share, { notice: `Webhook address made. Give ${hook.url} to the service that sends them.` }, 201);
+        } catch (err) {
+            if (!(err instanceof HookError)) throw err;
+            return showShare(req, res, share, { error: err.message }, err.status || 422);
+        }
+    });
+
+    r.post('/shares/:id/hooks/:hook/remove', async (req, res) => {
+        if (!guard(req, res)) return undefined;
+        const share = await mine(req, res);
+        if (!share) return undefined;
+        const hook = await hooks.get(req.params.hook);
+        if (!hook || hook.share_id !== share.id) return showShare(req, res, share, { error: 'No such webhook address.' }, 404);
+        await hooks.remove(owner(req), hook.id);
+        return showShare(req, res, share, { notice: 'Removed. That address answers "not found" from now on.' });
     });
 
     r.post('/shares/:id/close', async (req, res) => {

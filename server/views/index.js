@@ -259,7 +259,26 @@ function nodeBlock(share, machines, now) {
     return `<section class="cn-node" aria-labelledby="cn-node-h"><h2 id="cn-node-h">Or serve it from one of your computers</h2>${intro}${list}</section>`;
 }
 
-function sharePage({ share, connected, tunnel = null, visits = [], requests = [], key = null, baseUrl, notice = null, error = null, staff = false, machines = [], now = Date.now() }) {
+/**
+ * Webhooks that wait for your computer (CON-15): each address, where it goes on the computer's app, what came and what
+ * was handed over, and how many wait; the form for another. Plain forms, no script.
+ */
+function hooksBlock(share, hooks, now) {
+    const rows = hooks.length ? `<ul class="cn-hooks">${hooks.map((h, i) => `<li><div class="cn-hook-main"><div class="cn-copy"><code id="cn-hook-${i}">${esc(h.url)}</code><button type="button" class="cn-btn cn-btn-quiet" data-ovk-copy="#cn-hook-${i}" hidden>${kit.icon('copy')} Copy</button></div>
+<small>→ localhost:${esc(share.local_port)}${esc(h.local_path)}${h.label ? ` · ${esc(h.label)}` : ''} · ${esc(h.received)} received, ${esc(h.delivered)} handed over${h.waiting ? `, <b>${esc(h.waiting)} waiting for your computer</b>` : ''}${h.last_received_at ? ` · last ${esc(ago(h.last_received_at, now))}` : ''}${h.last_status ? ` · your app answered ${esc(h.last_status)}` : ''}</small></div>
+<form method="post" action="/shares/${esc(share.id)}/hooks/${esc(h.id)}/remove"><button class="cn-btn cn-btn-quiet" type="submit">${kit.icon('close')} Remove</button></form></li>`).join('')}</ul>`
+        : '<p class="cn-empty">No webhook addresses yet.</p>';
+    return `<section class="cn-hooks-sec" aria-labelledby="cn-hooks-h"><h2 id="cn-hooks-h">Webhooks that wait for your computer</h2>
+<p>Give a service (GitHub, Stripe, anything that sends webhooks) an address here instead of your share's. Each webhook is kept for up to 7 days and handed to your app, at the path you pick, as soon as your computer is connected: a laptop that sleeps misses nothing. Nobody has to sign in to send one, so check the provider's signature in your app.</p>
+${rows}
+<form class="cn-form cn-hook-add" method="post" action="/shares/${esc(share.id)}/hooks">
+<label class="cn-field"><span>Path on your app</span><input name="path" maxlength="500" value="/webhooks" placeholder="/webhooks/github" autocapitalize="none" autocomplete="off" spellcheck="false"></label>
+<label class="cn-field"><span>Name (optional)</span><input name="label" maxlength="80" placeholder="GitHub pushes"></label>
+<button class="cn-btn" type="submit">${kit.icon('plus')} Make a webhook address</button>
+</form></section>`;
+}
+
+function sharePage({ share, connected, tunnel = null, visits = [], requests = [], key = null, baseUrl, notice = null, error = null, staff = false, machines = [], hooks = [], now = Date.now() }) {
     const closed = share.status !== 'active';
     const state = closed ? 'Closed' : connected ? 'Connected' : 'Not connected';
     const stateText = closed ? `Closed ${ago(share.revoked_at, now)}. The address answers "closed" and stays yours.`
@@ -302,6 +321,7 @@ ${share.expires_at ? `<div><dt>${closed ? 'Ended' : 'Closes'}</dt><dd><time date
 </dl>
 ${!key && !closed && !share.node ? `<section class="cn-run"><h2>Connect it</h2><div class="cn-copy"><code id="cn-run">node ov-connect.js --key ovc_… --port ${esc(share.local_port)}</code></div><p class="cn-fine">The key was shown once, when it was made. <a href="${esc(CLIENT_URL(baseUrl))}">Download ov-connect.js</a> (Node 22 or newer).</p></section>` : ''}
 ${closed ? '' : nodeBlock(share, machines, now)}
+${closed ? '' : hooksBlock(share, hooks, now)}
 <section aria-labelledby="cn-visits-h"><h2 id="cn-visits-h">Who opened it (7 days)</h2>${visitRows}</section>
 ${closed ? '' : `<section class="cn-inspector" aria-labelledby="cn-reqs-h" data-cn-reqs="${esc(share.id)}"><h2 id="cn-reqs-h">Requests</h2>
 <p class="cn-fine">The last 100 through this share, newest first, added as they happen. Kept in memory only, never written down: no headers, no bodies, and query values show as "…".</p>

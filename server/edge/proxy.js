@@ -382,7 +382,43 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
     /** The grant refused someone: counted on the share page as "turned away". */
     function denied(share, who) { visit(share, who, { denied: true }); }
 
-    return { handle, upgrade, isShareHost, flush, forget, denied, stop, responseHeaders, forwardHeaders, inspector };
+    /**
+     * One stored webhook to the share's computer (CON-15): the request as it arrived, at the hook's path, with
+     * x-openvibe-hook and x-openvibe-event-id so the app can tell and dedupe. The answer's body is read and dropped.
+     * → { status } when the app answered, { offline: true } with no computer, { error } when it broke on the way.
+     */
+    function deliverHook(share, { method, path, headers = [], body, hookId, eventId }) {
+        const tunnel = tunnels.get(share.id);
+        if (!tunnel) return Promise.resolve({ offline: true });
+        const port = (tunnel.clientInfo && tunnel.clientInfo.port) || share.local_port;
+        const rec = inspector.begin(share.id, { method, path, who: { username: 'webhook' } });
+        return new Promise((resolve) => {
+            let done = false;
+            const finish = (out) => { if (done) return; done = true; clearTimeout(timer); inspector.end(rec, out.status ? { status: out.status } : { error: out.error || 'offline' }); resolve(out); };
+            let status = 0;
+            const id = tunnel.open({
+                onRes(m) { status = Number(m.status) || 0; },
+                onData() {},
+                onEnd() { tunnel.release(id); finish(status >= 100 && status <= 599 ? { status } : { error: 'bad_status' }); },
+                onAbort(m) { finish({ error: (m && m.code) || 'local_error' }); },
+                onPause() {}, onResume() {},
+            });
+            const timer = setTimeout(() => { tunnel.abort(id, 'timeout'); finish({ error: 'timeout' }); }, config.shares.requestTimeoutMs);
+            timer.unref();
+            const out = (Array.isArray(headers) ? headers : []).filter((h) => Array.isArray(h) && h.length === 2 && !/^(host|content-length|x-openvibe-)/i.test(String(h[0])));
+            out.push(['host', `localhost:${port}`], ['x-forwarded-host', share.host], ['x-forwarded-proto', config.shares.scheme],
+                ['x-openvibe-hook', String(hookId || '')], ['x-openvibe-event-id', String(eventId || '')], ['content-length', String(body ? body.length : 0)]);
+            tunnel.send({ t: 'req', id, method, path, headers: out });
+            if (body && body.length) {
+                rec.in += body.length;
+                const CHUNK = 32 * 1024;
+                for (let i = 0; i < body.length; i += CHUNK) tunnel.data(id, body.subarray(i, i + CHUNK));
+            }
+            tunnel.end(id);
+        });
+    }
+
+    return { handle, upgrade, isShareHost, flush, forget, denied, stop, responseHeaders, forwardHeaders, deliverHook, inspector };
 }
 
 /** Write an HTTP answer straight to an upgrade's socket (the gate's 302/401/404/502 before any tunnel opens). */

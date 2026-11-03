@@ -18,10 +18,14 @@ const TABLES = [
     // the account is taken off it.
     { table: 'share_reports', subject: 'reporter_subject', value: (usr) => usr, file: 'reports.json', erase: { anonymize: {} },
         columns: ['id', 'host', 'reason', 'details', 'status', 'created_at'] },
+    // Webhook addresses on a person's shares (CON-15). Their waiting webhooks (hook_requests) go with them, and with
+    // the shares (ON DELETE CASCADE); the export names the addresses and their counts, never a webhook's body.
+    { table: 'share_hooks', subject: 'owner_subject', value: (usr) => usr, file: 'webhooks.json', erase: 'delete',
+        columns: ['id', 'share_id', 'label', 'local_path', 'status', 'created_at', 'removed_at', 'received', 'delivered', 'last_received_at', 'last_delivered_at', 'last_status'] },
     {
         table: 'shares', subject: 'owner_subject', value: (usr) => usr, file: 'shares.json', erase: 'delete',
         columns: ['id', 'owner_username', 'label', 'host', 'local_port', 'mode', 'named', 'status', 'policy_version', 'key_prefix', 'note',
-            'created_at', 'updated_at', 'revoked_at', 'last_connected_at', 'last_visit_at', 'requests', 'bytes_in', 'bytes_out'],
+            'node_id', 'node_name', 'created_at', 'updated_at', 'revoked_at', 'last_connected_at', 'last_visit_at', 'requests', 'bytes_in', 'bytes_out'],
     },
 ];
 
@@ -30,7 +34,7 @@ function create({ db, log = console } = {}) {
         db,
         service: 'connect',
         tables: TABLES,
-        note: 'Your shares on OpenVibe Connect and your visits to other people\'s shares. Connect never stores what passed through a share.',
+        note: 'Your shares on OpenVibe Connect, their webhook addresses, and your visits to other people\'s shares. Connect never stores what passed through a share; a webhook to one of your addresses is kept only until your computer takes it, at most 7 days.',
         log,
     });
 }
