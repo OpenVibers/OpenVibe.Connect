@@ -100,6 +100,13 @@ const { check, done } = require('./helpers/check');
     await check('robots, llms.txt and the client download', async () => {
         assert.match((await t.get('/robots.txt')).text, /Disallow: \/grant/);
         assert.match((await t.get('/llms.txt')).text, /OpenVibe Connect/);
+        // SEO-33: llms.txt, then the README (Connect's full documentation).
+        const full = await t.get('/llms-full.txt');
+        assert.strictEqual(full.status, 200);
+        assert.ok(full.text.startsWith('# OpenVibe Connect'));
+        assert.match(full.text, /## The documentation \(README\)\n\n# /);
+        assert.match(full.text, /API keys for programs/, 'the README\'s sections are in it');
+        assert.ok(full.text.length > 5000, `${full.text.length} characters`);
         const js = await t.get('/ov-connect.js');
         assert.strictEqual(js.status, 200);
         assert.match(js.headers.get('content-type'), /javascript/);
