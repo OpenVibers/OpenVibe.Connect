@@ -7,6 +7,9 @@
  *   list(ownerSubject), get(id), byHost(host), byKey(key)
  *   setPolicy(owner, id, { mode, named })              bumps policy_version: every visitor's cookie goes stale
  *   rotateKey(owner, id) → key                         the old key stops working; a connected tunnel is closed
+ *   bindNode(owner, id, machine | null)                one of the owner's computers serves it (CON-4); the key stops
+ *                                                      working while one is bound. null: back to a new connect key
+ *   byNode(nodeId)                                     the open shares a computer serves
  *   revoke(owner, id)                                  the host answers 410 from now on
  *   hostFor(label, username), parseHost(host)          the naming rule (pure)
  *
@@ -121,7 +124,9 @@ function createShares(s, { config }) {
             named: Array.isArray(row.named) ? row.named : [],
             status: row.status,
             policy_version: Number(row.policy_version),
-            key_prefix: row.key_prefix,
+            key_prefix: row.node_id ? null : row.key_prefix,
+            // Served by one of the owner's computers, as OpenVibe Node (CON-4): its Network node principal and name.
+            node: row.node_id ? { id: row.node_id, name: row.node_name || 'A computer' } : null,
             note: row.note || null,
             created_at: iso(row.created_at),
             updated_at: iso(row.updated_at),
@@ -227,8 +232,34 @@ function createShares(s, { config }) {
         const share = await owned(owner, id);
         if (share.status !== 'active') throw new ShareError(410, 'share.revoked', 'That share is closed.');
         const key = newKey();
-        await db.exec('UPDATE shares SET key_prefix = $2, key_hash = $3, updated_at = now() WHERE id = $1', [share.id, key.slice(0, 10), sha256(key)]);
+        // A new key means the key serves it: a computer bound as OpenVibe Node is let go (CON-4).
+        await db.exec('UPDATE shares SET key_prefix = $2, key_hash = $3, node_id = NULL, node_name = NULL, updated_at = now() WHERE id = $1', [share.id, key.slice(0, 10), sha256(key)]);
         return { share: await get(share.id), key };
+    }
+
+    /**
+     * One of the owner's computers serves the share (CON-4): `machine` is { id: 'nod_…', name }, already checked to be
+     * the owner's and active (the route asks Network with the owner's own token). The connect key is replaced by one
+     * nobody is shown, so only that computer, with its node token and a tunnel token, can serve it now. null unbinds
+     * and returns a new key (shown once), for the one-file client again.
+     */
+    async function bindNode(owner, id, machine) {
+        const share = await owned(owner, id);
+        if (share.status !== 'active') throw new ShareError(410, 'share.revoked', 'That share is closed.');
+        const key = newKey();
+        if (machine) {
+            await db.exec('UPDATE shares SET node_id = $2, node_name = $3, key_prefix = $4, key_hash = $5, updated_at = now() WHERE id = $1',
+                [share.id, machine.id, String(machine.name || '').slice(0, 80) || null, 'node', sha256(key)]);
+            return { share: await get(share.id), key: null };
+        }
+        await db.exec('UPDATE shares SET node_id = NULL, node_name = NULL, key_prefix = $2, key_hash = $3, updated_at = now() WHERE id = $1',
+            [share.id, key.slice(0, 10), sha256(key)]);
+        return { share: await get(share.id), key };
+    }
+
+    async function byNode(nodeId) {
+        const rows = await db.many("SELECT * FROM shares WHERE node_id = $1 AND status = 'active' ORDER BY created_at DESC LIMIT 100", [String(nodeId || '')]);
+        return rows.map(view);
     }
 
     async function revoke(owner, id) {
@@ -337,7 +368,7 @@ function createShares(s, { config }) {
         return false;
     }
 
-    return { create, list, get, byHost, byKey, setPolicy, rotateKey, revoke, expireDue, report, openReports, handleReport, addWaiter, takeWaiters, touchConnected, flushCounters, visits, allows, view, domain };
+    return { create, list, get, byHost, byKey, byNode, bindNode, setPolicy, rotateKey, revoke, expireDue, report, openReports, handleReport, addWaiter, takeWaiters, touchConnected, flushCounters, visits, allows, view, domain };
 }
 
 function iso(v) {

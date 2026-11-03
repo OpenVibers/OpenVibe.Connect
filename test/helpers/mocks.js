@@ -42,7 +42,7 @@ async function startNetwork() {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
     const publicPem = publicKey.export({ type: 'spki', format: 'pem' });
     const privatePem = privateKey.export({ type: 'pkcs8', format: 'pem' });
-    const st = { users: new Map(), byUsername: new Map(), codes: new Map(), refresh: new Map(), requests: [], tokenRequests: [], down: false };
+    const st = { users: new Map(), byUsername: new Map(), codes: new Map(), refresh: new Map(), requests: [], tokenRequests: [], down: false, nodes: [] };
     let issuer = null;
     let nextUserId = 1;
 
@@ -118,6 +118,14 @@ async function startNetwork() {
             return json(200, { items: [], next_cursor: null });
         }
 
+        // A person's machines (Network's userRouter): their node principals, any status.
+        if (url.pathname === '/api/v1/me/nodes' && req.method === 'GET') {
+            const u = userFrom(req);
+            if (u === 'expired') return problem(json, 401, 'auth.expired', 'expired');
+            if (!u) return problem(json, 401, 'auth.required', 'send Authorization: Bearer <Network access token>');
+            return json(200, { nodes: st.nodes.filter((n) => n.owner === u.subject).map((n) => ({ principal: n.id, node_id: n.node_id, name: n.name, owner: { kind: 'user', subject: n.owner }, status: n.status, paired_for: { service: 'bot', ref: 'rob_x' }, last_seen_at: n.last_seen_at, created_at: '2026-11-01T00:00:00.000Z' })) });
+        }
+
         if (url.pathname === '/internal/identity/resolve-batch' && req.method === 'POST') return json(200, { results: {} });
         if (url.pathname === '/internal/notifications/push' && req.method === 'POST') return json(200, { ok: true });
 
@@ -128,6 +136,17 @@ async function startNetwork() {
     return {
         url: srv.url, publicPem, privatePem, state: st, requests: st.requests, tokenRequests: st.tokenRequests,
         addUser, userToken, signJwt: (claims) => signJwt(claims, privatePem), issuer: () => issuer,
+        /** A machine `user` owns on Network (a node principal) → { id: 'nod_…', name }. */
+        addNode(user, { name = 'Desk PC', status = 'active' } = {}) {
+            const n = { id: ids.newId('node'), node_id: `n-${crypto.randomBytes(6).toString('hex')}`, name, owner: user.subject, status, last_seen_at: new Date().toISOString() };
+            st.nodes.push(n);
+            return n;
+        },
+        /** That machine's node token, as Network's /oauth/token would sell it (audience openvibe.website, 300 s). */
+        nodeToken(node, { aud = 'openvibe.website', ttl = 300, iat = null, sub = null } = {}) {
+            const now = iat != null ? iat : Math.floor(Date.now() / 1000);
+            return serviceAuth.signServiceToken({ iss: issuer, sub: sub || `node:${node.id}`, actor_type: 'node', aud: [aud], cap: [], iat: now, exp: now + ttl, jti: `tok_${crypto.randomBytes(12).toString('hex')}` }, privatePem);
+        },
         issueCode(user, challenge) { const code = `code_${crypto.randomBytes(8).toString('hex')}`; st.codes.set(code, { user, challenge }); return code; },
         setDown(v) { st.down = v; },
         close: srv.close,

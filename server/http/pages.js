@@ -8,6 +8,8 @@
  *   /shares/:id                one share: connected or not, who may open it, who did, the command
  *   POST /shares/:id/policy    who can open it, the port
  *   POST /shares/:id/key       a new key (shown once); the connected computer is disconnected
+ *   POST /shares/:id/node      node=nod_… one of your computers serves it (CON-4); node= (empty) lets it go and shows a
+ *                              new key once
  *   POST /shares/:id/close     close it: the address answers "closed" from then on
  *   /grant?share=&next=        the gate's sign-in step (server/edge/gate.js): signed in and allowed → back to the
  *                              share host with a one-time code
@@ -21,7 +23,7 @@ const views = require('../views');
 const { ShareError } = require('../shares');
 
 function createPageRoutes(ctx) {
-    const { config, shares, tunnels, gate, proxy } = ctx;
+    const { config, shares, tunnels, gate, proxy, machines } = ctx;
     const r = asyncRouter();
     r.use(express.urlencoded({ extended: false, limit: '16kb' }));
     const page = (req, res, o, status = 200) => send(res, status, { viewer: req.viewer, config, path: req.originalUrl, ...o });
@@ -80,14 +82,17 @@ function createPageRoutes(ctx) {
 
     async function showShare(req, res, share, extra = {}, status = 200) {
         const tunnel = tunnels.get(share.id);
-        const visits = await shares.visits(share.id);
-        return page(req, res, { title: share.host, body: views.sharePage({ share, connected: Boolean(tunnel), tunnel, visits, requests: ctx.proxy ? ctx.proxy.inspector.list(share.id) : [], baseUrl: config.baseUrl, staff: req.viewer.role === 'admin', ...extra }) }, status);
+        const [visits, mine] = await Promise.all([
+            shares.visits(share.id),
+            share.status === 'active' ? machines.list(req.viewer.token) : Promise.resolve({ ok: true, machines: [] }),
+        ]);
+        return page(req, res, { title: share.host, body: views.sharePage({ share, connected: Boolean(tunnel), tunnel, visits, requests: ctx.proxy ? ctx.proxy.inspector.list(share.id) : [], baseUrl: config.baseUrl, staff: req.viewer.role === 'admin', machines: mine.ok ? mine.machines : null, ...extra }) }, status);
     }
 
     r.get('/shares/:id', async (req, res) => {
         const share = await mine(req, res);
         if (!share) return undefined;
-        const notice = req.query.saved ? 'Saved.' : null;
+        const notice = req.query.saved ? 'Saved.' : req.query.served ? `${share.node ? share.node.name : 'Your computer'} serves it now. Run the command below on it.` : null;
         return showShare(req, res, share, { notice });
     });
 
@@ -113,6 +118,29 @@ function createPageRoutes(ctx) {
             const { share: updated, key } = await shares.rotateKey(owner(req), share.id);
             tunnels.close(share.id, 4003, 'the key was replaced');
             return showShare(req, res, updated, { key, notice: 'A new key is made. The old one no longer works.' });
+        } catch (err) {
+            if (!(err instanceof ShareError)) throw err;
+            return showShare(req, res, share, { error: err.message }, err.status || 422);
+        }
+    });
+
+    r.post('/shares/:id/node', async (req, res) => {
+        if (!guard(req, res)) return undefined;
+        const share = await mine(req, res);
+        if (!share) return undefined;
+        const want = String(req.body.node || '').trim();
+        try {
+            if (!want) {
+                const { share: updated, key } = await shares.bindNode(owner(req), share.id, null);
+                tunnels.close(share.id, 4003, 'the computer was let go');
+                return showShare(req, res, updated, { key, notice: 'Your computer no longer serves it. Use this key with ov-connect.js, or pick a computer again.' });
+            }
+            const found = await machines.find(req.viewer.token, want);
+            if (!found.ok) return showShare(req, res, share, { error: 'Your computers could not be read from OpenVibe just now. Try again in a moment.' }, 503);
+            if (!found.machine) return showShare(req, res, share, { error: 'That is not one of your computers. Pair it with OpenVibe Node first.' }, 404);
+            const { share: updated } = await shares.bindNode(owner(req), share.id, found.machine);
+            tunnels.close(share.id, 4003, 'now served by one of your computers');
+            return res.redirect(303, `/shares/${encodeURIComponent(share.id)}?served=1`);
         } catch (err) {
             if (!(err instanceof ShareError)) throw err;
             return showShare(req, res, share, { error: err.message }, err.status || 422);
