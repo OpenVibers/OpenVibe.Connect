@@ -305,8 +305,14 @@ function createPageRoutes(ctx) {
         }
     });
 
+    const site = String(config.baseUrl).replace(/\/+$/, '');
     r.get('/robots.txt', (req, res) => {
-        res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(`User-agent: *\nAllow: /$\nDisallow: /shares\nDisallow: /grant\nDisallow: /auth\nDisallow: /api\n`);
+        res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(`User-agent: *\nAllow: /$\nDisallow: /shares\nDisallow: /grant\nDisallow: /auth\nDisallow: /api\n\nSitemap: ${site}/sitemap.xml\n`);
+    });
+    // GET /sitemap.xml: the one public page (the front door). agent.json names /sitemap.xml, which answered 404 (11-03).
+    r.get('/sitemap.xml', (req, res) => {
+        res.type('application/xml').set('Cache-Control', 'public, max-age=3600')
+            .send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${site}/</loc></url>\n</urlset>\n`);
     });
     // What llms.txt says (SEO-33: /llms-full.txt adds the README, Connect's full documentation, after it).
     const LLMS_LINES = [

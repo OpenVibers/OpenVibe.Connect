@@ -99,6 +99,10 @@ const { check, done } = require('./helpers/check');
 
     await check('robots, llms.txt and the client download', async () => {
         assert.match((await t.get('/robots.txt')).text, /Disallow: \/grant/);
+        assert.match((await t.get('/robots.txt')).text, /\nSitemap: https?:\/\/[^\n]+\/sitemap\.xml\n/, 'robots names the sitemap');
+        const map = await t.get('/sitemap.xml');
+        assert.strictEqual(map.status, 200, 'the sitemap agent.json names answers');
+        assert.match(map.text, /<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">\n  <url><loc>https?:\/\/[^<]+\/<\/loc><\/url>\n<\/urlset>/);
         assert.match((await t.get('/llms.txt')).text, /OpenVibe Connect/);
         // SEO-2: the agent manifest is served (11-03: the mount had landed inside the share-host middleware, after its
         // return, so it never ran while the source check passed).
