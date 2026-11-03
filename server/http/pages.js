@@ -28,6 +28,7 @@ const { ApiKeyError } = require('../api-keys');
 // Connect's README, its full public documentation, for /llms-full.txt (read once; empty if it is not shipped).
 const README = (() => { try { return require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'README.md'), 'utf8').trim(); } catch { return ''; } })();
 const { OAuthError } = require('../oauth');
+const seo = require('openvibe-shared/seo');
 
 function createPageRoutes(ctx) {
     const { config, shares, tunnels, gate, proxy, machines, hooks, apiKeys } = ctx;
@@ -305,7 +306,6 @@ function createPageRoutes(ctx) {
         }
     });
 
-    const site = String(config.baseUrl).replace(/\/+$/, '');
     r.get('/robots.txt', (req, res) => {
         res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(`User-agent: *\nAllow: /$\nDisallow: /shares\nDisallow: /grant\nDisallow: /auth\nDisallow: /api\n\nSitemap: ${site}/sitemap.xml\n`);
     });
@@ -314,24 +314,34 @@ function createPageRoutes(ctx) {
         res.type('application/xml').set('Cache-Control', 'public, max-age=3600')
             .send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${site}/</loc></url>\n</urlset>\n`);
     });
+    const site = String(config.baseUrl).replace(/\/+$/, '');
+    const abs = (p) => `${site}${p}`;
+
     // What llms.txt says (SEO-33: /llms-full.txt adds the README, Connect's full documentation, after it).
-    const LLMS_LINES = [
-            '# OpenVibe Connect',
-            '',
-            '> Share one port on your computer at https://<name>--<username>.openvibe.website, behind OpenVibe sign-in.',
-            '',
-            '- Client: one file, Node 22+: curl -fsSLO https://connect.openvibe.website/ov-connect.js; node ov-connect.js --key ovc_… --port 8080',
-            '- Who can open a share: only the owner, the owner and named OpenVibe usernames, or anyone signed in to OpenVibe. No public shares yet.',
-            '- The app behind a share receives X-OpenVibe-User and X-OpenVibe-Subject; Host is localhost:<port>.',
-            '- API (a person\'s Network token as a Bearer): GET/POST /api/v1/shares, GET/PATCH/DELETE /api/v1/shares/{id}, POST /api/v1/shares/{id}/key',
-            '- Source: https://github.com/OpenVibers/OpenVibe.Connect (AGPL-3.0)',
-            '',
-        ];
+    const NAME = 'OpenVibe Connect';
+    const SUMMARY = 'Share one port on your computer at https://<name>--<username>.openvibe.website, behind OpenVibe sign-in.';
+    const DETAILS = [
+        'Client: one file, Node 22+: curl -fsSLO https://connect.openvibe.website/ov-connect.js; node ov-connect.js --key ovc_… --port 8080.',
+        'Who can open a share: only the owner, the owner and named OpenVibe usernames, or anyone signed in to OpenVibe. No public shares yet.',
+        'The app behind a share receives X-OpenVibe-User and X-OpenVibe-Subject; Host is localhost:<port>.',
+        'API (a person\'s Network token as a Bearer): GET/POST /api/v1/shares, GET/PATCH/DELETE /api/v1/shares/{id}, POST /api/v1/shares/{id}/key.',
+        'Source: https://github.com/OpenVibers/OpenVibe.Connect (AGPL-3.0).',
+    ].join(' ');
+    const LLMS_SECTIONS = [{ title: 'Start here', links: [{ title: NAME, url: abs('/'), note: 'your shares and the form to make one' }] }];
+    const LLMS_OPTIONAL = [
+        { title: 'Client download', url: abs('/ov-connect.js'), note: 'one file, Node 22+' },
+        { title: 'Sitemap', url: abs('/sitemap.xml') },
+        { title: 'Full text for language models', url: abs('/llms-full.txt') },
+    ];
+    const LLMS_HEADER = seo.llmsTxt({
+        name: NAME, summary: SUMMARY, details: DETAILS, markdown: true, base: config.baseUrl,
+        sections: LLMS_SECTIONS, optional: LLMS_OPTIONAL,
+    });
     r.get('/llms.txt', (req, res) => {
-        res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(LLMS_LINES.join('\n'));
+        res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(LLMS_HEADER);
     });
     r.get('/llms-full.txt', (req, res) => {
-        res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(`${LLMS_LINES.join('\n')}\n\n## The documentation (README)\n\n${README}\n`);
+        res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(`${LLMS_HEADER}\n\n## The documentation (README)\n\n${README}\n`);
     });
 
     return r;
