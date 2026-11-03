@@ -25,6 +25,8 @@ const views = require('../views');
 const { ShareError } = require('../shares');
 const { HookError } = require('../hooks');
 const { ApiKeyError } = require('../api-keys');
+// Connect's README, its full public documentation, for /llms-full.txt (read once; empty if it is not shipped).
+const README = (() => { try { return require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'README.md'), 'utf8').trim(); } catch { return ''; } })();
 const { OAuthError } = require('../oauth');
 
 function createPageRoutes(ctx) {
@@ -306,8 +308,8 @@ function createPageRoutes(ctx) {
     r.get('/robots.txt', (req, res) => {
         res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(`User-agent: *\nAllow: /$\nDisallow: /shares\nDisallow: /grant\nDisallow: /auth\nDisallow: /api\n`);
     });
-    r.get('/llms.txt', (req, res) => {
-        res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send([
+    // What llms.txt says (SEO-33: /llms-full.txt adds the README, Connect's full documentation, after it).
+    const LLMS_LINES = [
             '# OpenVibe Connect',
             '',
             '> Share one port on your computer at https://<name>--<username>.openvibe.website, behind OpenVibe sign-in.',
@@ -318,7 +320,12 @@ function createPageRoutes(ctx) {
             '- API (a person\'s Network token as a Bearer): GET/POST /api/v1/shares, GET/PATCH/DELETE /api/v1/shares/{id}, POST /api/v1/shares/{id}/key',
             '- Source: https://github.com/OpenVibers/OpenVibe.Connect (AGPL-3.0)',
             '',
-        ].join('\n'));
+        ];
+    r.get('/llms.txt', (req, res) => {
+        res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(LLMS_LINES.join('\n'));
+    });
+    r.get('/llms-full.txt', (req, res) => {
+        res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(`${LLMS_LINES.join('\n')}\n\n## The documentation (README)\n\n${README}\n`);
     });
 
     return r;
