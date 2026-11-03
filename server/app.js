@@ -249,7 +249,11 @@ async function createApp(opts = {}) {
     // ── Pages ───────────────────────────────────────────────
     app.use(rateLimit({ windowMs: 60_000, limit: Number(process.env.CONNECT_RATE_LIMIT_PER_MIN) || 300, standardHeaders: true, legacyHeaders: false }));
     app.use(createOAuthRoutes(ctx));
-    app.use(createPageRoutes(ctx));
+    const pageRoutes = createPageRoutes(ctx);
+    // The Markdown twins of the public pages, and the head link and Link: header that name them (SEO-1,
+    // server/agent-twins.js): a twin is the page rendered signed out.
+    require('./agent-twins').mountTwins(app, { router: pageRoutes, descriptor: require('./agent-descriptor'), baseUrl: ctx.config.baseUrl });
+    app.use(pageRoutes);
     app.use((req, res) => sendNotFound(req, res, ctx));
 
     // eslint-disable-next-line no-unused-vars
