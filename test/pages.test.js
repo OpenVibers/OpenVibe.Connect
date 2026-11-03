@@ -100,6 +100,12 @@ const { check, done } = require('./helpers/check');
     await check('robots, llms.txt and the client download', async () => {
         assert.match((await t.get('/robots.txt')).text, /Disallow: \/grant/);
         assert.match((await t.get('/llms.txt')).text, /OpenVibe Connect/);
+        // SEO-2: the agent manifest is served (11-03: the mount had landed inside the share-host middleware, after its
+        // return, so it never ran while the source check passed).
+        const agent = await t.get('/.well-known/agent.json');
+        assert.strictEqual(agent.status, 200);
+        const m = agent.json();
+        assert.deepStrictEqual([m.network, m.id, m.home], ['OpenVibe', 'connect', 'https://connect.openvibe.website']);
         // SEO-33: llms.txt, then the README (Connect's full documentation).
         const full = await t.get('/llms-full.txt');
         assert.strictEqual(full.status, 200);
