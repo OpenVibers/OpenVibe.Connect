@@ -7,8 +7,9 @@
  *   GET    /shares               your shares (website.share@1 shapes, plus connected)
  *   POST   /shares               { label, port, mode?, named?, expires_in? } → 201 { share, key }   the key is in this answer only
  *   GET    /shares/:id           one of your shares
- *   PATCH  /shares/:id           { mode?, named?, port?, note?, expires_in? }   expires_in: seconds from now (600 to 30 days),
- *                                or null to stay open until you close it
+ *   PATCH  /shares/:id           { mode?, named?, port?, note?, expires_in?, offline_site? }   expires_in: seconds from now
+ *                                (600 to 30 days), or null to stay open until you close it; offline_site: where a browser
+ *                                goes while the computer is off, one of the sites on the domain (CON-17), '' or null to clear
  *   DELETE /shares/:id           close it (the host answers 410 from then on)
  *   POST   /shares/:id/key       a new key → { share, key }; the connected computer is disconnected
  *   PUT    /shares/:id/node      { node: 'nod_…' } one of your computers serves it, as OpenVibe Node (CON-4): the key
@@ -72,7 +73,7 @@ function createApi(ctx) {
         const share = await mine(req, res);
         if (!share) return undefined;
         const b = req.body || {};
-        const updated = await shares.setPolicy(owner(req), share.id, { mode: b.mode, named: b.named, port: b.port, note: b.note, expires_in: b.expires_in });
+        const updated = await shares.setPolicy(owner(req), share.id, { mode: b.mode, named: b.named, port: b.port, note: b.note, expires_in: b.expires_in, offline_site: b.offline_site });
         proxy.forget(updated.host);
         return res.json({ share: shape(updated) });
     }));

@@ -365,6 +365,7 @@ ${modeChoices(share.mode, staff)}
 <label class="cn-field"><span>People (for "the people you name")</span><input name="named" maxlength="2000" value="${esc(share.named.join(', '))}" placeholder="sam, riley" autocapitalize="none" autocomplete="off" spellcheck="false"><small>OpenVibe usernames, separated by commas</small></label>
 <label class="cn-field cn-field-port"><span>Port on your computer</span><input name="port" inputmode="numeric" pattern="[0-9]{1,5}" maxlength="5" value="${esc(share.local_port)}"></label>
 ${closesField('keep', { keep: share.expires_at ? `As it is: ${until(share.expires_at, now)}` : 'As it is: only when you close it' })}
+<label class="cn-field"><span>While your computer is off <small>(optional)</small></span><input name="offline_site" type="url" maxlength="300" value="${esc(share.offline_site || '')}" placeholder="https://yourname.openvibe.website" autocapitalize="none" autocomplete="off" spellcheck="false"><small>Send visitors to one of your OpenVibe.Space sites instead of the waiting page. The site's address alone keeps the page they asked for; with a path, everyone goes to that page.</small></label>
 <button class="cn-btn" type="submit">${kit.icon('check')} Save</button>
 <p class="cn-fine">Changing who can open it signs everyone out of this share; the people still allowed are let back in when they next open it.</p>
 </form>`;

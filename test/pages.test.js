@@ -61,6 +61,21 @@ const { check, done } = require('./helpers/check');
         assert.match(page.text, /localhost:8791/);
     });
 
+    await check('while the computer is off (CON-17): the form saves a site, shows it, refuses one off the domain, clears it', async () => {
+        const scheme = new URL((await t.get('/api/v1/shares', { as: kim })).json().shares[0].url).protocol;
+        const site = `${scheme}//kim.openvibe.website/`;
+        const r = await t.get(`/shares/${id}/policy`, { as: kim, form: { mode: 'named', named: '@lee, sam', offline_site: site } });
+        assert.strictEqual(r.status, 303);
+        const page = await t.get(r.headers.get('location'), { as: kim });
+        assert.match(page.text, /While your computer is off/);
+        assert.ok(page.text.includes(`name="offline_site" type="url" maxlength="300" value="${site}"`), 'the saved site is shown');
+        const bad = await t.get(`/shares/${id}/policy`, { as: kim, form: { mode: 'named', named: '@lee, sam', offline_site: 'https://evil.example/' } });
+        assert.strictEqual(bad.status, 422);
+        assert.match(bad.text, /one of the sites on this domain/);
+        await t.get(`/shares/${id}/policy`, { as: kim, form: { mode: 'named', named: '@lee, sam', offline_site: '' } });
+        assert.strictEqual((await t.get('/api/v1/shares', { as: kim })).json().shares[0].offline_site, null, 'cleared');
+    });
+
     await check('another site cannot change a share (the form must come from Connect)', async () => {
         const r = await t.get(`/shares/${id}/close`, { as: kim, method: 'POST', form: {}, origin: 'https://evil.example' });
         assert.strictEqual(r.status, 403);

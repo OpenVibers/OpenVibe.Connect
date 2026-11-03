@@ -105,6 +105,39 @@ async function until(fn, ms = 3000) {
         assert.match(page.headers['content-security-policy'], /default-src 'none'/, 'still no script');
     });
 
+    await check('nothing connected, with a site named for it: a browser goes there, a program still waits (CON-17)', async () => {
+        const shareUrl = new URL(made.share.url);
+        const domain = made.share.host.split('.').slice(1).join('.');
+        const site = `${shareUrl.protocol}//alex.${domain}`;
+        const patch = (offline_site) => t.get(`/api/v1/shares/${made.share.id}`, { as: alex, method: 'PATCH', json: { offline_site } });
+        // Only a site on the share domain: never another host, a share's "--" host, a deeper name, a port or credentials.
+        for (const bad of ['ftp://alex.' + domain, `${shareUrl.protocol}//evil.example/`, `${shareUrl.protocol}//a--alex.${domain}`, `${shareUrl.protocol}//x.alex.${domain}`,
+            `${shareUrl.protocol}//alex.${domain}:8443/`, `${shareUrl.protocol}//u:p@alex.${domain}/`, `${shareUrl.protocol}//${domain}/`, 'not a url']) {
+            const r = await patch(bad);
+            assert.strictEqual(r.status, 422, bad);
+            assert.strictEqual(r.json().code, 'share.invalid_offline_site', bad);
+        }
+        const set = await patch(`${site}/#top`);
+        assert.strictEqual(set.status, 200, set.text);
+        assert.strictEqual(set.json().share.offline_site, `${site}/`, 'normalised, the fragment dropped');
+        assert.strictEqual(set.json().share.policy_version, made.share.policy_version, 'nobody is signed out for it');
+        const html = { cookie: alexCookie, headers: { accept: 'text/html' } };
+        const page = await t.share(made.share.host, '/docs/a?b=1', html);
+        assert.strictEqual(page.status, 302);
+        assert.strictEqual(page.headers.location, `${site}/docs/a?b=1`, 'a bare site keeps the page asked for');
+        assert.strictEqual(page.headers['cache-control'], 'no-store');
+        const sneaky = await t.share(made.share.host, '//evil.example/x', html);
+        assert.ok(sneaky.headers.location.startsWith(`${site}/`), `stays on the site: ${sneaky.headers.location}`);
+        assert.strictEqual((await t.share(made.share.host, '/', { cookie: alexCookie, headers: { accept: 'application/json' } })).status, 503, 'a program still gets the 503 and its Retry-After');
+        assert.strictEqual((await t.share(made.share.host, '/', { headers: { accept: 'text/html' } })).status, 302, 'the gate still comes first');
+        assert.notStrictEqual((await t.share(made.share.host, '/', { headers: { accept: 'text/html' } })).headers.location, `${site}/`, 'a visitor not let in is sent to sign in, not to the site');
+        await patch(`${site}/away.html?from=share`);
+        assert.strictEqual((await t.share(made.share.host, '/docs/a', html)).headers.location, `${site}/away.html?from=share`, 'a site with a path is the one page');
+        const cleared = await patch('');
+        assert.strictEqual(cleared.json().share.offline_site, null);
+        assert.strictEqual((await t.share(made.share.host, '/', html)).status, 503, 'cleared: the waiting page again');
+    });
+
     await check('the client connects with its key and the share answers from the local app', async () => {
         c = t.client({ key: made.key, port: app.port });
         const ready = await c.ready();
