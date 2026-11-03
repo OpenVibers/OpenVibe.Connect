@@ -8,6 +8,7 @@ module.exports = {
     home: "https://connect.openvibe.website",
     site: "connect.openvibe.website",
     api: "/api/v1",
+    openapi: '/openapi.json',
     policy: {
         auth: ["Network OIDC"],
     },
