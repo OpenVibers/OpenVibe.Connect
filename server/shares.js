@@ -5,7 +5,8 @@
  *
  *   create(owner, { label, port, mode, named, note })  → { share, key }   the key is returned once, never stored
  *   list(ownerSubject), get(id), byHost(host), byKey(key)
- *   setPolicy(owner, id, { mode, named })              bumps policy_version: every visitor's cookie goes stale
+ *   setPolicy(owner, id, { mode, named, offline_site }) bumps policy_version when who may open it changes
+ *   offlineSite(value, { domain, scheme })             the CON-17 fallback rule (pure): a site on the domain, or null
  *   rotateKey(owner, id) → key                         the old key stops working; a connected tunnel is closed
  *   bindNode(owner, id, machine | null)                one of the owner's computers serves it (CON-4); the key stops
  *                                                      working while one is bound. null: back to a new connect key
@@ -44,6 +45,29 @@ const REPORT_REASONS = {
 const SIGNIN_NOT_YET = '"Anyone signed in" opens with the abuse check. For now, name the people who may open it.';
 
 const isStaff = (owner) => Boolean(owner && owner.role === 'admin');
+// A Space site's name: one DNS label with single hyphens, so never a share's "--" host (OpenVibe.Space's NAME_RE).
+const SITE_LABEL_RE = /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,62}$/;
+const OFFLINE_SITE_HELP = 'The fallback is one of the sites on this domain, such as your OpenVibe.Space site: https://<name>.openvibe.website, optionally with a path.';
+
+/**
+ * Where a browser goes while a share's computer is off (CON-17): '' / null / undefined-as-cleared → null; otherwise
+ * a site on the share domain itself (https://<name>.<domain>, one label, never a share's "--" host), no port and no
+ * credentials, a path and query allowed, the fragment dropped. Anything else throws, so a share can never send its
+ * visitors off the domain.
+ */
+function offlineSite(value, { domain, scheme = 'https' }) {
+    if (value == null || String(value).trim() === '') return null;
+    let u;
+    try { u = new URL(String(value).trim()); } catch { throw new ShareError(422, 'share.invalid_offline_site', OFFLINE_SITE_HELP); }
+    const suffix = `.${domain}`;
+    const label = u.hostname.endsWith(suffix) ? u.hostname.slice(0, -suffix.length) : '';
+    if (u.protocol !== `${scheme}:` || u.port || u.username || u.password || !SITE_LABEL_RE.test(label)) {
+        throw new ShareError(422, 'share.invalid_offline_site', OFFLINE_SITE_HELP);
+    }
+    u.hash = '';
+    if (u.href.length > 300) throw new ShareError(422, 'share.invalid_offline_site', 'That address is too long.');
+    return u.href;
+}
 
 class ShareError extends Error {
     constructor(status, code, message) { super(message); this.status = status; this.code = code; }
@@ -133,6 +157,8 @@ function createShares(s, { config }) {
             revoked_at: iso(row.revoked_at),
             expires_at: iso(row.expires_at),
             closed_reason: row.closed_reason || null,
+            // CON-17: where a browser goes while the computer is off (one of the sites on the domain), or null.
+            offline_site: row.offline_site || null,
             // It closed itself: revoked at (or just after) the time it was given.
             expired: row.status === 'revoked' && Boolean(row.expires_at && row.revoked_at && new Date(row.revoked_at) >= new Date(row.expires_at)),
             last_connected_at: iso(row.last_connected_at),
@@ -215,15 +241,19 @@ function createShares(s, { config }) {
         if (!Number.isInteger(port) || port < 1 || port > 65535) throw new ShareError(422, 'share.invalid_port', 'The port is a number from 1 to 65535.');
         const note = input.note === undefined ? share.note : (input.note ? String(input.note).slice(0, 200) : null);
         const policyChanged = mode !== share.mode || JSON.stringify(named) !== JSON.stringify(share.named);
+        // offline_site: undefined keeps it; '' / null clears it (not a policy change: nobody is signed out).
+        const keepOffline = input.offline_site === undefined;
+        const offline = keepOffline ? null : offlineSite(input.offline_site, { domain, scheme });
         // expires_in: undefined keeps the time it has; null / '' / 'never' takes it away; seconds set it from now.
         const keepExpiry = input.expires_in === undefined || input.expires_in === 'keep';
         const ttl = keepExpiry ? null : expiresIn(input.expires_in);
         await db.exec(
             `UPDATE shares SET mode = $2, named = $3::jsonb, local_port = $4, note = $5, updated_at = now(),
                     policy_version = policy_version + $6,
-                    expires_at = CASE WHEN $7::boolean THEN expires_at WHEN $8::int IS NULL THEN NULL ELSE now() + make_interval(secs => $8::int) END
+                    expires_at = CASE WHEN $7::boolean THEN expires_at WHEN $8::int IS NULL THEN NULL ELSE now() + make_interval(secs => $8::int) END,
+                    offline_site = CASE WHEN $9::boolean THEN offline_site ELSE $10 END
               WHERE id = $1`,
-            [share.id, mode, JSON.stringify(named), port, note, policyChanged ? 1 : 0, keepExpiry, ttl],
+            [share.id, mode, JSON.stringify(named), port, note, policyChanged ? 1 : 0, keepExpiry, ttl, keepOffline, offline],
         );
         return get(share.id);
     }
@@ -377,4 +407,4 @@ function iso(v) {
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-module.exports = { createShares, ShareError, isStaff, REPORT_REASONS, hostFor, parseHost, handleOf, normalizeNamed, LABEL_RE, MODES, RESERVED_LABELS, sha256 };
+module.exports = { offlineSite, createShares, ShareError, isStaff, REPORT_REASONS, hostFor, parseHost, handleOf, normalizeNamed, LABEL_RE, MODES, RESERVED_LABELS, sha256 };

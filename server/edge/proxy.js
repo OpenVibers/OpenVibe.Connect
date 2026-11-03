@@ -220,6 +220,17 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = nu
         if (overRate(share)) { visit(share, who, { denied: true }); sendProblem(req, res, 429, 'rate_limited', 'Too many requests', 'This share had too many requests in the last minute. Try again shortly.', { headers: { 'retry-after': '30' } }); return null; }
         if (overBytes(share)) { visit(share, who, { denied: true }); sendProblem(req, res, 429, 'over_daily_limit', 'Over today\'s limit', `${share.owner_username}'s shares moved as much data as they can today. They open again at midnight UTC.`); return null; }
         const tunnel = tunnels.get(share.id);
+        if (!tunnel && share.offline_site && wantsHtml(req)) {
+            // CON-17: the owner named a site for when the computer is off. A bare site address keeps the page asked
+            // for (a static copy at the same paths); one with a path takes every visitor to that page. Only the path
+            // and query of the request are used, so the host is always the owner's site on this domain.
+            const site = new URL(share.offline_site);
+            const asked = new URL(req.url || '/', 'http://x');
+            const location = site.pathname === '/' && !site.search ? `${site.origin}${asked.pathname}${asked.search}` : site.href;
+            res.writeHead(302, { location, 'cache-control': 'no-store', 'cloudflare-cdn-cache-control': 'no-store', 'retry-after': '10' });
+            res.end();
+            return null;
+        }
         if (!tunnel) {
             // Keep-online, v0 (CON-17): a browser waits on this page, asking again every 10 seconds, and lands on the app
             // the moment its computer is back; when it was last connected says how long the wait may be.
