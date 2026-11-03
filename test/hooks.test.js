@@ -73,15 +73,13 @@ const SECRET = 'hook-delivery-secret-0123456789abcdef';
         assert.strictEqual(big.status, 413);
     });
 
-    await check('Events\' delivery: 503 while the computer is offline, then handed to the app at the hook\'s path, once', async () => {
+    await check('Events\' delivery is 503 while the computer is offline; connecting hands it to the app at the hook\'s path, once', async () => {
         const off = await deliver(envelope);
         assert.strictEqual(off.status, 503, off.text);
+        const before = app.seen.length;
         const c = t.client({ key: made.key, port: app.port });
         await c.ready();
-        const before = app.seen.length;
-        const r = await deliver(envelope);
-        assert.strictEqual(r.status, 200, r.text);
-        assert.deepStrictEqual(r.json(), { delivered: true, status: 200 });
+        for (let i = 0; i < 100 && !app.seen.slice(before).some((x) => x.url === '/webhooks/github'); i++) await new Promise((r) => setTimeout(r, 20));
         const got = app.seen.slice(before).find((x) => x.url === '/webhooks/github');
         assert.ok(got, 'the app got it');
         assert.strictEqual(got.method, 'POST');
@@ -89,7 +87,7 @@ const SECRET = 'hook-delivery-secret-0123456789abcdef';
         assert.strictEqual(got.headers['x-github-event'], 'push');
         assert.strictEqual(got.headers['x-hub-signature-256'], 'sha256=abc');
         assert.strictEqual(got.headers['x-openvibe-hook'], hook.id);
-        assert.strictEqual(got.headers['x-openvibe-event-id'], envelope.event_id);
+        assert.strictEqual(got.headers['x-openvibe-event-id'], envelope.event_id, 'the event\'s own id, whichever way it came');
         assert.strictEqual(got.headers.cookie, undefined);
         const again = await deliver(envelope);
         assert.strictEqual(again.status, 200);
@@ -124,6 +122,39 @@ const SECRET = 'hook-delivery-secret-0123456789abcdef';
         await t.ctx.s.db.exec("UPDATE hook_requests SET expires_at = now() - interval '1 minute' WHERE id = $1", [ref]);
         await t.ctx.expireSweep();
         assert.strictEqual((await t.ctx.s.db.maybe('SELECT id FROM hook_requests WHERE id = $1', [ref])), null);
+    });
+
+    await check('a webhook that waited goes to the app as soon as its computer connects; Events\' retry then finds it settled', async () => {
+        const h3 = (await t.get(`/api/v1/shares/${made.share.id}/hooks`, { as: alex, json: { path: '/webhooks/waited' } })).json().hook;
+        const w = await t.get(`/h/${h3.id}`, { method: 'POST', body: '{"waited":true}', headers: { 'content-type': 'application/json' } });
+        assert.strictEqual(w.status, 202);
+        const env = (await t.ctx.s.db.one("SELECT envelope FROM service_outbox WHERE envelope->'payload'->>'body_ref' = $1", [w.json().id])).envelope;
+        const before = app.seen.length;
+        const c = t.client({ key: made.key, port: app.port });
+        await c.ready();
+        for (let i = 0; i < 100 && !app.seen.slice(before).some((x) => x.url === '/webhooks/waited'); i++) await new Promise((r) => setTimeout(r, 20));
+        const got = app.seen.slice(before).find((x) => x.url === '/webhooks/waited');
+        assert.ok(got, 'handed over on connect');
+        assert.strictEqual(got.body, '{"waited":true}');
+        assert.strictEqual(got.headers['x-openvibe-event-id'], env.event_id, 'the event\'s own id');
+        const late = await deliver(env);
+        assert.deepStrictEqual(late.json(), { gone: true }, 'Events\' delivery finds it settled');
+        assert.strictEqual(app.seen.filter((x) => x.url === '/webhooks/waited').length, 1, 'once');
+        c.stop();
+    });
+
+    await check('with the computer connected, Events\' delivery hands the webhook over itself', async () => {
+        const h4 = (await t.get(`/api/v1/shares/${made.share.id}/hooks`, { as: alex, json: { path: '/webhooks/live' } })).json().hook;
+        const c = t.client({ key: made.key, port: app.port });
+        await c.ready();
+        const w = await t.get(`/h/${h4.id}`, { method: 'POST', body: '{"live":1}', headers: { 'content-type': 'application/json' } });
+        const env = (await t.ctx.s.db.one("SELECT envelope FROM service_outbox WHERE envelope->'payload'->>'body_ref' = $1", [w.json().id])).envelope;
+        const r = await deliver(env);
+        assert.deepStrictEqual(r.json(), { delivered: true, status: 200 });
+        const got = app.seen.filter((x) => x.url === '/webhooks/live');
+        assert.strictEqual(got.length, 1);
+        assert.strictEqual(got[0].headers['x-openvibe-event-id'], env.event_id);
+        c.stop();
     });
 
     await check('the page: make one with a plain form', async () => {

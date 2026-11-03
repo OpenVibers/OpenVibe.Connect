@@ -70,6 +70,9 @@ async function createApp(opts = {}) {
     const nodeAuth = createNodeAuth({ config, keys, now: s.now });
     const machines = opts.machines || createMachines({ config, fetchImpl, log, now: s.now });
     const tunnels = createTunnels({ shares, config, log, nodeAuth, now: s.now, onConnect: async (share) => {
+        // Webhooks that waited for this computer (CON-15) go at once, oldest first; Events' later retry finds them
+        // settled. One that fails waits for that retry.
+        ctx.deliverWaiting(share).catch((err) => log.warn('[OpenVibe.Connect] waiting webhooks not handed over:', err.message));
         const waiting = await shares.takeWaiters(share.id);
         for (const subject of waiting) await notifier.shareBack(subject, share);
         if (waiting.length) log.log(`[OpenVibe.Connect] told ${waiting.length} person(s) ${share.host} is back`);
@@ -93,6 +96,18 @@ async function createApp(opts = {}) {
     const hooks = createHooks(s, { config, outbox, now: s.now });
 
     const ctx = { config, s, keys, sso, principal, shares, tunnels, gate, proxy, notifier, nodeAuth, machines, hooks, outbox, accountData, accountSend, log };
+
+    /** A share's computer is connected: its waiting webhooks go to its app, one at a time, oldest first. → delivered count */
+    ctx.deliverWaiting = async (share) => {
+        let n = 0;
+        for (const q of await hooks.waiting(share.id)) {
+            const out = await proxy.deliverHook(share, { method: q.method, path: q.path, headers: q.headers, body: q.body, hookId: q.hookId, eventId: q.eventId || q.ref });
+            if (out.offline) break;
+            if (out.status && out.status < 500 && await hooks.settle(q.ref, out.status)) n++;
+        }
+        if (n) log.log(`[OpenVibe.Connect] ${n} waiting webhook(s) handed to ${share.host}`);
+        return n;
+    };
 
     /** Shares whose time is up close themselves (CON-6): their computers are disconnected and their lists forgotten. */
     ctx.expireSweep = async () => {
