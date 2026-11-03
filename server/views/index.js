@@ -278,7 +278,29 @@ ${rows}
 </form></section>`;
 }
 
-function sharePage({ share, connected, tunnel = null, visits = [], requests = [], key = null, baseUrl, notice = null, error = null, staff = false, machines = [], hooks = [], now = Date.now() }) {
+/**
+ * API keys for the share (CON-16 v0): what a program sends to pass the gate. A new key is shown once, with the request
+ * to try it; the list shows each key's start, its rate and when it was last used, and revokes it.
+ */
+function apiKeysBlock(share, keys, made, now) {
+    const fresh = made ? `<div class="cn-newkey" role="status"><p><b>Your new key</b> for ${esc(made.key.name)}. Copy it now: it is not shown again.</p>
+<div class="cn-copy"><code id="cn-apikey">${esc(made.token)}</code><button type="button" class="cn-btn cn-btn-quiet" data-ovk-copy="#cn-apikey" hidden>${kit.icon('copy')} Copy</button></div>
+<p class="cn-hint">Try it: <code>curl -H "Authorization: Bearer ${esc(made.token)}" https://${esc(share.host)}/</code></p></div>` : '';
+    const rows = keys.length ? `<ul class="cn-hooks">${keys.map((k) => `<li><div class="cn-hook-main"><b>${esc(k.name)}</b> <code>${esc(k.prefix)}…</code>
+<small>${esc(k.per_minute)} a minute · made ${esc(ago(k.created_at, now))} · ${k.last_used_at ? `last used ${esc(ago(k.last_used_at, now))}` : 'not used yet'}</small></div>
+<form method="post" action="/shares/${esc(share.id)}/api-keys/${esc(k.id)}/revoke"><button class="cn-btn cn-btn-quiet" type="submit">${kit.icon('close')} Revoke</button></form></li>`).join('')}</ul>`
+        : '<p class="cn-empty">No API keys yet.</p>';
+    return `<section class="cn-hooks-sec" aria-labelledby="cn-keys-h"><h2 id="cn-keys-h">API keys for programs</h2>
+<p>A program (a script, an editor, another app) sends a key as <code>Authorization: Bearer …</code> and passes without signing in: share a model on your computer, like Ollama or llama.cpp, and call it from anywhere. A key opens what this share answers to programs, never its web pages, and your app never sees the key. Revoke one and it stops at once.</p>
+${fresh}${rows}
+<form class="cn-form cn-hook-add" method="post" action="/shares/${esc(share.id)}/api-keys">
+<label class="cn-field"><span>Name</span><input name="name" maxlength="60" required placeholder="laptop script"></label>
+<label class="cn-field"><span>Requests a minute</span><input name="per_minute" type="number" min="1" max="600" value="60" inputmode="numeric"></label>
+<button class="cn-btn" type="submit">${kit.icon('plus')} Make an API key</button>
+</form></section>`;
+}
+
+function sharePage({ share, connected, tunnel = null, visits = [], requests = [], key = null, baseUrl, notice = null, error = null, staff = false, machines = [], hooks = [], apiKeys = [], newApiKey = null, now = Date.now() }) {
     const closed = share.status !== 'active';
     const state = closed ? 'Closed' : connected ? 'Connected' : 'Not connected';
     const stateText = closed ? `Closed ${ago(share.revoked_at, now)}. The address answers "closed" and stays yours.`
@@ -322,6 +344,7 @@ ${share.expires_at ? `<div><dt>${closed ? 'Ended' : 'Closes'}</dt><dd><time date
 ${!key && !closed && !share.node ? `<section class="cn-run"><h2>Connect it</h2><div class="cn-copy"><code id="cn-run">node ov-connect.js --key ovc_… --port ${esc(share.local_port)}</code></div><p class="cn-fine">The key was shown once, when it was made. <a href="${esc(CLIENT_URL(baseUrl))}">Download ov-connect.js</a> (Node 22 or newer).</p></section>` : ''}
 ${closed ? '' : nodeBlock(share, machines, now)}
 ${closed ? '' : hooksBlock(share, hooks, now)}
+${closed ? '' : apiKeysBlock(share, apiKeys, newApiKey, now)}
 <section aria-labelledby="cn-visits-h"><h2 id="cn-visits-h">Who opened it (7 days)</h2>${visitRows}</section>
 ${closed ? '' : `<section class="cn-inspector" aria-labelledby="cn-reqs-h" data-cn-reqs="${esc(share.id)}"><h2 id="cn-reqs-h">Requests</h2>
 <p class="cn-fine">The last 100 through this share, newest first, added as they happen. Kept in memory only, never written down: no headers, no bodies, and query values show as "…".</p>

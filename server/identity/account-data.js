@@ -22,6 +22,9 @@ const TABLES = [
     // the shares (ON DELETE CASCADE); the export names the addresses and their counts, never a webhook's body.
     { table: 'share_hooks', subject: 'owner_subject', value: (usr) => usr, file: 'webhooks.json', erase: 'delete',
         columns: ['id', 'share_id', 'label', 'local_path', 'status', 'created_at', 'removed_at', 'received', 'delivered', 'last_received_at', 'last_delivered_at', 'last_status'] },
+    // API keys on a person's shares (CON-16): the export names each key, its start and its rate, never its hash.
+    { table: 'share_api_keys', subject: 'owner_subject', value: (usr) => usr, file: 'api-keys.json', erase: 'delete',
+        columns: ['id', 'share_id', 'name', 'key_prefix', 'per_minute', 'created_at', 'last_used_at', 'revoked_at'] },
     {
         table: 'shares', subject: 'owner_subject', value: (usr) => usr, file: 'shares.json', erase: 'delete',
         columns: ['id', 'owner_username', 'label', 'host', 'local_port', 'mode', 'named', 'status', 'policy_version', 'key_prefix', 'note',

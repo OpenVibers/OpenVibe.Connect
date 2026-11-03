@@ -24,9 +24,10 @@ const { send } = require('../render/layout');
 const views = require('../views');
 const { ShareError } = require('../shares');
 const { HookError } = require('../hooks');
+const { ApiKeyError } = require('../api-keys');
 
 function createPageRoutes(ctx) {
-    const { config, shares, tunnels, gate, proxy, machines, hooks } = ctx;
+    const { config, shares, tunnels, gate, proxy, machines, hooks, apiKeys } = ctx;
     const r = asyncRouter();
     r.use(express.urlencoded({ extended: false, limit: '16kb' }));
     const page = (req, res, o, status = 200) => send(res, status, { viewer: req.viewer, config, path: req.originalUrl, ...o });
@@ -85,12 +86,13 @@ function createPageRoutes(ctx) {
 
     async function showShare(req, res, share, extra = {}, status = 200) {
         const tunnel = tunnels.get(share.id);
-        const [visits, mine, hookList] = await Promise.all([
+        const [visits, mine, hookList, keyList] = await Promise.all([
             shares.visits(share.id),
             share.status === 'active' ? machines.list(req.viewer.token) : Promise.resolve({ ok: true, machines: [] }),
             share.status === 'active' ? hooks.list(share.id) : Promise.resolve([]),
+            share.status === 'active' && apiKeys ? apiKeys.list(share.id) : Promise.resolve([]),
         ]);
-        return page(req, res, { title: share.host, body: views.sharePage({ share, connected: Boolean(tunnel), tunnel, visits, requests: ctx.proxy ? ctx.proxy.inspector.list(share.id) : [], baseUrl: config.baseUrl, staff: req.viewer.role === 'admin', machines: mine.ok ? mine.machines : null, hooks: hookList, ...extra }) }, status);
+        return page(req, res, { title: share.host, body: views.sharePage({ share, connected: Boolean(tunnel), tunnel, visits, requests: ctx.proxy ? ctx.proxy.inspector.list(share.id) : [], baseUrl: config.baseUrl, staff: req.viewer.role === 'admin', machines: mine.ok ? mine.machines : null, hooks: hookList, apiKeys: keyList, ...extra }) }, status);
     }
 
     r.get('/shares/:id', async (req, res) => {
@@ -162,6 +164,33 @@ function createPageRoutes(ctx) {
             if (!(err instanceof HookError)) throw err;
             return showShare(req, res, share, { error: err.message }, err.status || 422);
         }
+    });
+
+    r.post('/shares/:id/api-keys', async (req, res) => {
+        if (!guard(req, res)) return undefined;
+        const share = await mine(req, res);
+        if (!share) return undefined;
+        try {
+            const made = await apiKeys.create(owner(req), share, { name: req.body.name, per_minute: req.body.per_minute ? Number(req.body.per_minute) : undefined });
+            res.set('Cache-Control', 'no-store');
+            return showShare(req, res, share, { notice: 'API key made. Copy it now: it is not shown again.', newApiKey: made }, 201);
+        } catch (err) {
+            if (!(err instanceof ApiKeyError)) throw err;
+            return showShare(req, res, share, { error: err.message }, err.status || 422);
+        }
+    });
+
+    r.post('/shares/:id/api-keys/:key/revoke', async (req, res) => {
+        if (!guard(req, res)) return undefined;
+        const share = await mine(req, res);
+        if (!share) return undefined;
+        try {
+            await apiKeys.revoke(owner(req), share, req.params.key);
+        } catch (err) {
+            if (!(err instanceof ApiKeyError)) throw err;
+            return showShare(req, res, share, { error: err.message }, err.status || 404);
+        }
+        return showShare(req, res, share, { notice: 'Revoked. That key opens nothing from now on.' });
     });
 
     r.post('/shares/:id/hooks/:hook/remove', async (req, res) => {

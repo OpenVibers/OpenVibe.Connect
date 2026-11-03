@@ -36,7 +36,7 @@ function privateCache(value) {
     return ['private', ...parts].join(', ');
 }
 
-function createProxy({ config, shares, tunnels, gate, log = console, now = () => Date.now() }) {
+function createProxy({ config, shares, tunnels, gate, apiKeys = null, log = console, now = () => Date.now() }) {
     // The last requests through each share, for its owner's page (CON-8 v0; memory only).
     const inspector = require('./inspector').createInspector({ now });
     const domain = config.shares.domain;
@@ -104,6 +104,8 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
         for (let i = 0; i + 1 < pairs.length; i += 2) {
             const name = String(pairs[i]).toLowerCase();
             if (DROP_IN.test(name)) continue;
+            // An API key (CON-16) is for the edge alone: the app never sees it, only X-OpenVibe-Subject key:<id>.
+            if (who.apiKey && name === 'authorization') continue;
             if (HOP.has(name) && !(raw && (name === 'connection' || name === 'upgrade'))) continue;
             out.push([name, String(pairs[i + 1])]);
         }
@@ -167,6 +169,12 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
         });
         res.end(page(title, text, link, { refresh, note, report, notify }));
     }
+    /** Does a response's head say it is a web page (HTML or XHTML)? `headers` is [[name, value]] or an object. */
+    function isHtml(headers) {
+        const pairs = Array.isArray(headers) ? headers : Object.entries(headers || {});
+        const ct = pairs.find(([k]) => String(k).toLowerCase() === 'content-type');
+        return Boolean(ct) && /^\s*(text\/html|application\/xhtml\+xml)\b/i.test(String(ct[1]));
+    }
     function wantsHtml(req) { return /text\/html/.test(String(req.headers.accept || '')) && (req.method === 'GET' || req.method === 'HEAD'); }
     function sendProblem(req, res, status, code, title, text, extra = {}) {
         if (wantsHtml(req)) return sendPage(res, status, title, text, extra);
@@ -178,8 +186,18 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
 
     /** The share, the person and the tunnel for a request, or an answer already sent. */
     async function admit(req, res, share, parsedPath) {
-        const { ours } = gate.splitCookies(req.headers.cookie);
-        const who = ours ? gate.verify(ours, share) : null;
+        // An API key (CON-16) passes without signing in; a wrong or revoked one is refused, never sent to sign in.
+        const bearer = /^Bearer\s+(ovsk_\S+)$/i.exec(String(req.headers.authorization || ''));
+        let who = null;
+        if (bearer && apiKeys) {
+            const key = await apiKeys.check(share, bearer[1]);
+            if (!key) { sendProblem(req, res, 401, 'bad_key', 'That key does not open this share', 'The API key is wrong, revoked, or for another share.', { json: { error: 'bad_key' } }); return null; }
+            who = { subject: `key:${key.id}`, username: `key: ${key.name}`, apiKey: key.id };
+            if (apiKeys.overRate(key)) { visit(share, who, { denied: true }); sendProblem(req, res, 429, 'key_rate_limited', 'Too many requests', `This key allows ${key.per_minute} requests a minute.`, { headers: { 'retry-after': '60' } }); return null; }
+        } else {
+            const { ours } = gate.splitCookies(req.headers.cookie);
+            who = ours ? gate.verify(ours, share) : null;
+        }
         if (!who) {
             const url = grantUrl(share, parsedPath);
             if (wantsHtml(req)) { res.writeHead(302, { location: url, 'cache-control': 'no-store', 'cloudflare-cdn-cache-control': 'no-store' }); res.end(); return null; }
@@ -264,9 +282,17 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
         let finished = false;
         let headTimer = null;
         let received = 0;
+        let blocked = false;
         const id = tunnel.open({
             onRes(m) {
                 clearTimeout(headTimer);
+                // A key opens the share's API, never its pages: an HTML answer to a key is refused here, so a key posted
+                // in public cannot make the share a public website past the sign-in gate (CON-16, CON-9).
+                if (who.apiKey && isHtml(m.headers)) {
+                    blocked = true;
+                    tunnel.abort(id, 'html_to_key');
+                    return sendProblem(req, res, 406, 'api_only', 'Keys open this share\'s API', 'An API key opens what this share answers to programs, not its web pages. Open the page in a browser and sign in with OpenVibe.', { json: { error: 'api_only' } });
+                }
                 const status = Number(m.status);
                 if (!Number.isInteger(status) || status < 100 || status > 599 || status === 101) {
                     tunnel.abort(id, 'bad_status');
@@ -277,6 +303,7 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
                 return undefined;
             },
             onData(buf) {
+                if (blocked) return;
                 addBytes(share, 'out', buf.length);
                 rec.out += buf.length;
                 if (!res.write(buf)) {
@@ -284,9 +311,10 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
                     res.once('drain', () => tunnel.send({ t: 'resume', id }));
                 }
             },
-            onEnd() { finished = true; tunnel.release(id); clearTimeout(headTimer); res.end(); },
+            onEnd() { finished = true; tunnel.release(id); clearTimeout(headTimer); if (!blocked) res.end(); },
             onAbort(m) {
                 finished = true;
+                if (blocked) return;
                 clearTimeout(headTimer);
                 if (m && m.code) rec.error = String(m.code).slice(0, 40);
                 if (res.headersSent) { res.destroy(); return; }

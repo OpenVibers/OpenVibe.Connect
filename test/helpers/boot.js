@@ -161,6 +161,11 @@ function startLocalApp() {
                     const iv = setInterval(() => { n++; res.write(`data: tick ${n}\n\n`); if (n === 3) { clearInterval(iv); res.end(); } }, 20);
                     return;
                 }
+                if (req.url === '/page') {
+                    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+                    res.end('<!doctype html><title>a page</title><p>a page');
+                    return;
+                }
                 if (req.url === '/big') {
                     res.writeHead(200, { 'content-type': 'application/octet-stream' });
                     res.end(Buffer.alloc(3 * 1024 * 1024, 7));
