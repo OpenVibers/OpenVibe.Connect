@@ -32,6 +32,7 @@ const { createNodeApi } = require('./http/node-api');
 const { createNodeAuth } = require('./auth/node-auth');
 const { createMachines } = require('./machines');
 const { createHooks } = require('./hooks');
+const { createProbe } = require('./probe');
 const { createHookRoutes } = require('./http/hooks');
 const { createServiceOutbox } = require('openvibe-sdk/events');
 const { createPageRoutes } = require('./http/pages');
@@ -73,6 +74,10 @@ async function createApp(opts = {}) {
         // Webhooks that waited for this computer (CON-15) go at once, oldest first; Events' later retry finds them
         // settled. One that fails waits for that retry.
         ctx.deliverWaiting(share).catch((err) => log.warn('[OpenVibe.Connect] waiting webhooks not handed over:', err.message));
+        // The signed probe (CON-9): once a day per share, a little after its computer connects (the app may still be
+        // starting), its front page is read for the signs of a credential trap; a likely one goes to staff review.
+        const probeTimer = setTimeout(() => { ctx.probe.run(share).catch(() => {}); }, ctx.probeDelayMs);
+        if (probeTimer.unref) probeTimer.unref();
         const waiting = await shares.takeWaiters(share.id);
         for (const subject of waiting) await notifier.shareBack(subject, share);
         if (waiting.length) log.log(`[OpenVibe.Connect] told ${waiting.length} person(s) ${share.host} is back`);
@@ -96,6 +101,8 @@ async function createApp(opts = {}) {
     const hooks = createHooks(s, { config, outbox, now: s.now });
 
     const ctx = { config, s, keys, sso, principal, shares, tunnels, gate, proxy, notifier, nodeAuth, machines, hooks, outbox, accountData, accountSend, log };
+    ctx.probe = createProbe({ shares, proxy, config, log, now: s.now });
+    ctx.probeDelayMs = opts.probeDelayMs != null ? opts.probeDelayMs : 10_000;
 
     /** A share's computer is connected: its waiting webhooks go to its app, one at a time, oldest first. → delivered count */
     ctx.deliverWaiting = async (share) => {
