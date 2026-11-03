@@ -124,6 +124,28 @@ curl -H "Authorization: Bearer ovsk_…" https://llm--you.openvibe.website/v1/mo
   the list adds `today` and `used: [{ what, n }]`) and `DELETE /api/v1/shares/:id/api-keys/:sak_id`. Cases:
   `test/api-keys.test.js`, `test/api-key-quotas.test.js`.
 
+### Claude and other MCP clients (CON-16, MCP OAuth 2.1)
+
+If what you share is an MCP server, its address works as a connector URL in Claude or any MCP client
+(`https://tools--you.openvibe.website/mcp`). The client signs the person in with OpenVibe, with no key to paste:
+
+1. The share answers a program that has no credentials `401` with
+   `WWW-Authenticate: Bearer resource_metadata="https://<share>/.well-known/oauth-protected-resource"`. That document
+   (RFC 9728) names Connect as the authorization server. Connect's metadata (RFC 8414) is at
+   `/.well-known/oauth-authorization-server`.
+2. The client registers itself (`POST /oauth/register`, RFC 7591). Only public clients with PKCE are accepted, and their
+   redirect URIs must be https, or http on a loopback address for a desktop app.
+3. `GET /oauth/authorize` with `resource=<the share's address>` (RFC 8707) and an S256 challenge. The person signs in,
+   the share's own rule decides whether they may, and they consent on Connect. An unknown client or redirect URI gets
+   a page, never a redirect.
+4. `POST /oauth/token` swaps the code (60 seconds, used once) and verifier for an access token (`ovat_…`, an hour) bound
+   to that share, and a refresh token (`ovrt_…`, 30 days). Each refresh rotates both; the old pair stops.
+
+The edge takes `Authorization: Bearer ovat_…` as the person who consented. The app sees `X-OpenVibe-Subject` and
+`X-OpenVibe-User` as for a signed-in visitor, never the token. A policy change, the owner signing the app out (on the
+share's page, under "Use it from Claude and other MCP clients") or the share closing stops every token. Only hashes are
+kept. Cases: `test/mcp-oauth.test.js`.
+
 ## API
 
 With a person's OpenVibe token as a Bearer (or the session on connect.openvibe.website):

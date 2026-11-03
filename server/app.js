@@ -33,6 +33,8 @@ const { createNodeAuth } = require('./auth/node-auth');
 const { createMachines } = require('./machines');
 const { createHooks } = require('./hooks');
 const { createApiKeys } = require('./api-keys');
+const { createOAuth } = require('./oauth');
+const { createOAuthRoutes } = require('./http/oauth-routes');
 const { createProbe } = require('./probe');
 const { createHookRoutes } = require('./http/hooks');
 const { createServiceOutbox } = require('openvibe-sdk/events');
@@ -86,7 +88,8 @@ async function createApp(opts = {}) {
     const gate = createGate({ config, now: s.now });
     // API keys for a share (CON-16 v0): a program passes the gate with one; it opens the share's API, never its pages.
     const apiKeys = createApiKeys(s, { now: s.now });
-    const proxy = createProxy({ config, shares, tunnels, gate, apiKeys, log, now: s.now });
+    const oauth = createOAuth(s, { shares, scheme: config.shares.scheme, now: s.now });
+    const proxy = createProxy({ config, shares, tunnels, gate, apiKeys, oauth, log, now: s.now });
 
     const accountData = accountDataLib.create({ db: s.db, log });
     const accountSend = opts.accountSend || (config.oauth.clientSecret
@@ -103,7 +106,7 @@ async function createApp(opts = {}) {
     });
     const hooks = createHooks(s, { config, outbox, now: s.now });
 
-    const ctx = { config, s, keys, sso, principal, shares, tunnels, gate, proxy, apiKeys, notifier, nodeAuth, machines, hooks, outbox, accountData, accountSend, log };
+    const ctx = { config, s, keys, sso, principal, shares, tunnels, gate, proxy, apiKeys, oauth, notifier, nodeAuth, machines, hooks, outbox, accountData, accountSend, log };
     ctx.probe = createProbe({ shares, proxy, config, log, now: s.now });
     ctx.probeDelayMs = opts.probeDelayMs != null ? opts.probeDelayMs : 10_000;
 
@@ -242,6 +245,7 @@ async function createApp(opts = {}) {
 
     // ── Pages ───────────────────────────────────────────────
     app.use(rateLimit({ windowMs: 60_000, limit: Number(process.env.CONNECT_RATE_LIMIT_PER_MIN) || 300, standardHeaders: true, legacyHeaders: false }));
+    app.use(createOAuthRoutes(ctx));
     app.use(createPageRoutes(ctx));
     app.use((req, res) => sendNotFound(req, res, ctx));
 

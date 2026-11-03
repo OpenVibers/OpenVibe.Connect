@@ -4,6 +4,11 @@ What changed in OpenVibe Connect, newest first.
 
 ## Unreleased — 2026-11-03
 
+- MCP OAuth 2.1 (CON-16): a share's address works as a connector in Claude or any MCP client. The client is sent to
+  Connect to sign the person in with OpenVibe: protected-resource metadata on the share, then registration, authorize
+  with PKCE S256 and consent, then tokens bound to that share and rotated on refresh. The owner sees and signs out each
+  app (`server/oauth.js`, `server/http/oauth-routes.js`, migration `0010_share_oauth`).
+
 - API keys, v1 (CON-16): a key may have a daily quota (`per_day`, UTC days, kept across restarts; over it, 429
   `key_daily_quota` until midnight UTC), and the share page shows what each key did today: its requests, the MCP tools
   it called and the models it asked for, by name and count (migration `0009_share_api_key_usage`).

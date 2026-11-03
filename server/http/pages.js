@@ -25,6 +25,7 @@ const views = require('../views');
 const { ShareError } = require('../shares');
 const { HookError } = require('../hooks');
 const { ApiKeyError } = require('../api-keys');
+const { OAuthError } = require('../oauth');
 
 function createPageRoutes(ctx) {
     const { config, shares, tunnels, gate, proxy, machines, hooks, apiKeys } = ctx;
@@ -86,13 +87,14 @@ function createPageRoutes(ctx) {
 
     async function showShare(req, res, share, extra = {}, status = 200) {
         const tunnel = tunnels.get(share.id);
-        const [visits, mine, hookList, keyList] = await Promise.all([
+        const [visits, mine, hookList, keyList, oauthSessions] = await Promise.all([
             shares.visits(share.id),
             share.status === 'active' ? machines.list(req.viewer.token) : Promise.resolve({ ok: true, machines: [] }),
             share.status === 'active' ? hooks.list(share.id) : Promise.resolve([]),
             share.status === 'active' && apiKeys ? apiKeys.list(share.id) : Promise.resolve([]),
+            share.status === 'active' && ctx.oauth ? ctx.oauth.list(share.id) : Promise.resolve([]),
         ]);
-        return page(req, res, { title: share.host, body: views.sharePage({ share, connected: Boolean(tunnel), tunnel, visits, requests: ctx.proxy ? ctx.proxy.inspector.list(share.id) : [], baseUrl: config.baseUrl, staff: req.viewer.role === 'admin', machines: mine.ok ? mine.machines : null, hooks: hookList, apiKeys: keyList, ...extra }) }, status);
+        return page(req, res, { title: share.host, body: views.sharePage({ share, connected: Boolean(tunnel), tunnel, visits, requests: ctx.proxy ? ctx.proxy.inspector.list(share.id) : [], baseUrl: config.baseUrl, staff: req.viewer.role === 'admin', machines: mine.ok ? mine.machines : null, hooks: hookList, apiKeys: keyList, oauthSessions, ...extra }) }, status);
     }
 
     r.get('/shares/:id', async (req, res) => {
@@ -178,6 +180,20 @@ function createPageRoutes(ctx) {
             if (!(err instanceof ApiKeyError)) throw err;
             return showShare(req, res, share, { error: err.message }, err.status || 422);
         }
+    });
+
+    // Sign an MCP client out of the share (CON-16): its tokens stop at once.
+    r.post('/shares/:id/oauth/:token/revoke', async (req, res) => {
+        if (!guard(req, res)) return undefined;
+        const share = await mine(req, res);
+        if (!share) return undefined;
+        try {
+            await ctx.oauth.revoke(owner(req), share, req.params.token);
+        } catch (err) {
+            if (!(err instanceof OAuthError)) throw err;
+            return showShare(req, res, share, { error: err.message }, err.status || 404);
+        }
+        return showShare(req, res, share, { notice: 'Signed out. That app opens nothing here until someone signs it in again.' });
     });
 
     r.post('/shares/:id/api-keys/:key/revoke', async (req, res) => {
