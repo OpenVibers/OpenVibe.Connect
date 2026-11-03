@@ -2,6 +2,12 @@
 
 What changed in OpenVibe Connect, newest first.
 
+## Unreleased — 2026-11-03
+
+- API keys, v1 (CON-16): a key may have a daily quota (`per_day`, UTC days, kept across restarts; over it, 429
+  `key_daily_quota` until midnight UTC), and the share page shows what each key did today: its requests, the MCP tools
+  it called and the models it asked for, by name and count (migration `0009_share_api_key_usage`).
+
 ## 0.1.0 — 2026-11-02
 
 The first version (Website Connect v0, plan 2026-10-28 §5.9b; ADR-057 as reviewed 2026-11-02, OQ-13): your

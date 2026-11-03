@@ -279,6 +279,19 @@ ${rows}
 }
 
 /**
+ * A key's use today (CON-16 v1): its requests against its daily quota, and the MCP tools and models it used, by count.
+ */
+function keyUseToday(k) {
+    if (!k.today) return '';
+    const quota = k.per_day ? ` of ${esc(Number(k.per_day).toLocaleString('en-US'))}` : '';
+    const used = (k.used || []).map((u) => {
+        const [kind, ...rest] = String(u.what).split(':');
+        return `<li><span class="cn-muted">${kind === 'tool' ? 'tool' : 'model'}</span> <code>${esc(rest.join(':'))}</code> ×${esc(u.n)}</li>`;
+    }).join('');
+    return `<div class="cn-keyuse"><small>Today: ${esc(Number(k.today).toLocaleString('en-US'))}${quota} requests</small>${used ? `<ul class="cn-keyuse-list">${used}</ul>` : ''}</div>`;
+}
+
+/**
  * API keys for the share (CON-16 v0): what a program sends to pass the gate. A new key is shown once, with the request
  * to try it; the list shows each key's start, its rate and when it was last used, and revokes it.
  */
@@ -287,7 +300,8 @@ function apiKeysBlock(share, keys, made, now) {
 <div class="cn-copy"><code id="cn-apikey">${esc(made.token)}</code><button type="button" class="cn-btn cn-btn-quiet" data-ovk-copy="#cn-apikey" hidden>${kit.icon('copy')} Copy</button></div>
 <p class="cn-hint">Try it: <code>curl -H "Authorization: Bearer ${esc(made.token)}" https://${esc(share.host)}/</code></p></div>` : '';
     const rows = keys.length ? `<ul class="cn-hooks">${keys.map((k) => `<li><div class="cn-hook-main"><b>${esc(k.name)}</b> <code>${esc(k.prefix)}…</code>
-<small>${esc(k.per_minute)} a minute · made ${esc(ago(k.created_at, now))} · ${k.last_used_at ? `last used ${esc(ago(k.last_used_at, now))}` : 'not used yet'}</small></div>
+<small>${esc(k.per_minute)} a minute${k.per_day ? ` · ${esc(Number(k.per_day).toLocaleString('en-US'))} a day` : ''} · made ${esc(ago(k.created_at, now))} · ${k.last_used_at ? `last used ${esc(ago(k.last_used_at, now))}` : 'not used yet'}</small>
+${keyUseToday(k)}</div>
 <form method="post" action="/shares/${esc(share.id)}/api-keys/${esc(k.id)}/revoke"><button class="cn-btn cn-btn-quiet" type="submit">${kit.icon('close')} Revoke</button></form></li>`).join('')}</ul>`
         : '<p class="cn-empty">No API keys yet.</p>';
     return `<section class="cn-hooks-sec" aria-labelledby="cn-keys-h"><h2 id="cn-keys-h">API keys for programs</h2>
@@ -296,6 +310,7 @@ ${fresh}${rows}
 <form class="cn-form cn-hook-add" method="post" action="/shares/${esc(share.id)}/api-keys">
 <label class="cn-field"><span>Name</span><input name="name" maxlength="60" required placeholder="laptop script"></label>
 <label class="cn-field"><span>Requests a minute</span><input name="per_minute" type="number" min="1" max="600" value="60" inputmode="numeric"></label>
+<label class="cn-field"><span>Requests a day <small>(optional)</small></span><input name="per_day" type="number" min="1" max="1000000" inputmode="numeric" placeholder="no daily cap"></label>
 <button class="cn-btn" type="submit">${kit.icon('plus')} Make an API key</button>
 </form></section>`;
 }

@@ -146,7 +146,7 @@ function createApi(ctx) {
         const share = await mine(req, res);
         if (!share) return undefined;
         const b = req.body || {};
-        const made = await apiKeys.create(owner(req), share, { name: b.name, per_minute: b.per_minute });
+        const made = await apiKeys.create(owner(req), share, { name: b.name, per_minute: b.per_minute, per_day: b.per_day });
         res.set('Cache-Control', 'no-store');
         return res.status(201).json({ api_key: made.key, key: made.token });
     }));
