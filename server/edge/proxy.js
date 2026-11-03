@@ -418,7 +418,47 @@ function createProxy({ config, shares, tunnels, gate, log = console, now = () =>
         });
     }
 
-    return { handle, upgrade, isShareHost, flush, forget, denied, stop, responseHeaders, forwardHeaders, deliverHook, inspector };
+    /**
+     * One GET through a share's tunnel for Connect itself (CON-9's probe): the answer's status, content type and the
+     * first maxBytes of its body. → { status, type, body } | { offline: true } | { error }
+     */
+    function fetchThrough(share, { path = '/', headers = [], maxBytes = 512 * 1024 } = {}) {
+        const tunnel = tunnels.get(share.id);
+        if (!tunnel) return Promise.resolve({ offline: true });
+        const port = (tunnel.clientInfo && tunnel.clientInfo.port) || share.local_port;
+        return new Promise((resolve) => {
+            let done = false;
+            let status = 0;
+            let type = '';
+            const chunks = [];
+            let size = 0;
+            const finish = (out) => { if (done) return; done = true; clearTimeout(timer); resolve(out); };
+            const id = tunnel.open({
+                onRes(m) {
+                    status = Number(m.status) || 0;
+                    for (const pair of Array.isArray(m.headers) ? m.headers : []) if (Array.isArray(pair) && String(pair[0]).toLowerCase() === 'content-type') type = String(pair[1]).slice(0, 120);
+                },
+                onData(buf) {
+                    if (size >= maxBytes) return;
+                    const take = buf.subarray(0, maxBytes - size);
+                    chunks.push(take);
+                    size += take.length;
+                    if (size >= maxBytes) { tunnel.abort(id, 'enough'); finish({ status, type, body: Buffer.concat(chunks) }); }
+                },
+                onEnd() { tunnel.release(id); finish({ status, type, body: Buffer.concat(chunks) }); },
+                onAbort(m) { finish(size ? { status, type, body: Buffer.concat(chunks) } : { error: (m && m.code) || 'local_error' }); },
+                onPause() {}, onResume() {},
+            });
+            const timer = setTimeout(() => { tunnel.abort(id, 'timeout'); finish(size ? { status, type, body: Buffer.concat(chunks) } : { error: 'timeout' }); }, config.shares.requestTimeoutMs);
+            timer.unref();
+            const out = (Array.isArray(headers) ? headers : []).filter((h) => Array.isArray(h) && h.length === 2);
+            out.push(['host', `localhost:${port}`], ['x-forwarded-host', share.host], ['x-forwarded-proto', config.shares.scheme], ['accept', 'text/html,*/*;q=0.5'], ['content-length', '0']);
+            tunnel.send({ t: 'req', id, method: 'GET', path, headers: out });
+            tunnel.end(id);
+        });
+    }
+
+    return { handle, upgrade, isShareHost, flush, forget, denied, stop, responseHeaders, forwardHeaders, deliverHook, fetchThrough, inspector };
 }
 
 /** Write an HTTP answer straight to an upgrade's socket (the gate's 302/401/404/502 before any tunnel opens). */

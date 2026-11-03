@@ -86,6 +86,13 @@ wrong and what they saw. OpenVibe staff read the open reports at `/admin/reports
 is disconnected and its address then says it was closed after a report. A report keeps the reporter's account only
 when they were signed in, never an address.
 
+Connect also checks each share itself, once a day, a little after its computer connects (CON-9, the signed probe). It
+reads the share's front page through the tunnel with an `x-openvibe-probe: t=<unix>,v1=<hmac>` header, so your app can
+tell the request is Connect's, and looks for the signs of a credential trap: a password, card or wallet-phrase field on a
+page that names a brand (PayPal, Google, a bank…), or one with an urgent "verify your account" story. A page that looks
+like one becomes an automatic report for staff; Connect never closes a share by itself here, and nothing of the page is
+kept beyond the report's one line. An ordinary sign-in page for your own app is not reported.
+
 ## API
 
 With a person's OpenVibe token as a Bearer (or the session on connect.openvibe.website):
