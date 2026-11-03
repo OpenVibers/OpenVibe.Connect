@@ -159,6 +159,9 @@ async function createApp(opts = {}) {
             log.error('[OpenVibe.Connect] share request failed:', err && err.message);
             if (!res.headersSent) { res.statusCode = 502; res.end('Something went wrong on our side.'); } else res.destroy();
         });
+    // /.well-known/agent.json (openvibe-shared/agent-layer, SEO-2): what this site serves, for agents.
+    // After the share hosts: a share's own /.well-known/agent.json belongs to the share.
+    require('openvibe-shared/agent-layer').mount(app, { descriptor: require('./agent-descriptor') });
     });
 
     const release = require('openvibe-shared/release').createRelease({ service: 'connect', root: path.join(__dirname, '..') });
