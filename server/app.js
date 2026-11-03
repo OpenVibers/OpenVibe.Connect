@@ -244,6 +244,18 @@ async function createApp(opts = {}) {
     app.use('/api/v1', rateLimit({ windowMs: 60_000, limit: Number(process.env.CONNECT_API_RATE_LIMIT_PER_MIN) || 240, standardHeaders: true, legacyHeaders: false, handler: (req, res) => contracts.http.sendProblem(res, 429, 'rate_limited', { detail: 'too many requests from this address; retry shortly', ctx: req.ov }) }));
     app.use('/api/v1/node', createNodeApi(ctx));
     app.use('/api/v1', createApi(ctx));
+    // GET /openapi.json (SEO-3): the API as OpenAPI 3.1. It is not in openvibe-contracts, so the document is read from
+    // the routes this app mounts under /api/, with the summaries the API files' header comments give them
+    // (server/http/openapi-routes.js).
+    {
+        const d = require('./agent-descriptor');
+        const site = String(config.baseUrl).replace(/\/+$/, '');
+        app.get('/openapi.json', require('./http/openapi-routes').openapiRoute(app, {
+            title: `${d.name} API`, description: d.purpose, version: require('../package.json').version, baseUrl: site,
+            docs: `${site}/llms-full.txt`,
+            files: ['http/api.js', 'http/node-api.js'].map((f) => require('path').join(__dirname, f)),
+        }));
+    }
     app.use('/api', (req, res) => contracts.http.sendProblem(res, 404, 'route.not_found', { detail: 'No such API route', ctx: req.ov }));
 
     // ── Pages ───────────────────────────────────────────────
