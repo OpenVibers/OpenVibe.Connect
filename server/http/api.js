@@ -28,9 +28,10 @@ const { http } = require('openvibe-contracts');
 const { asyncRouter } = require('./router');
 const { ShareError } = require('../shares');
 const { HookError } = require('../hooks');
+const { ApiKeyError } = require('../api-keys');
 
 function createApi(ctx) {
-    const { shares, tunnels, principal, proxy, machines, hooks } = ctx;
+    const { shares, tunnels, principal, proxy, machines, hooks, apiKeys } = ctx;
     const r = asyncRouter();
     r.use(express.json({ limit: '16kb' }));
     r.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
@@ -42,7 +43,7 @@ function createApi(ctx) {
     const shape = (s) => ({ ...s, connected: tunnels.isConnected(s.id) });
     const guard = (fn) => async (req, res) => {
         try { return await fn(req, res); } catch (err) {
-            if (err instanceof ShareError || err instanceof HookError) return fail(res, req, err.status, err.code, err.message);
+            if (err instanceof ShareError || err instanceof HookError || err instanceof ApiKeyError) return fail(res, req, err.status, err.code, err.message);
             throw err;
         }
     };
@@ -134,6 +135,26 @@ function createApi(ctx) {
         const hook = await hooks.get(req.params.hook);
         if (!hook || hook.share_id !== share.id) return fail(res, req, 404, 'hook.not_found', 'No such webhook address.');
         return res.json({ hook: await hooks.remove(owner(req), hook.id) });
+    }));
+
+    // API keys (CON-16 v0): a program passes the gate with one. The key is in the answer that makes it, never again.
+    r.get('/shares/:id/api-keys', guard(async (req, res) => {
+        const share = await mine(req, res);
+        return share ? res.json({ api_keys: await apiKeys.list(share.id) }) : undefined;
+    }));
+    r.post('/shares/:id/api-keys', guard(async (req, res) => {
+        const share = await mine(req, res);
+        if (!share) return undefined;
+        const b = req.body || {};
+        const made = await apiKeys.create(owner(req), share, { name: b.name, per_minute: b.per_minute });
+        res.set('Cache-Control', 'no-store');
+        return res.status(201).json({ api_key: made.key, key: made.token });
+    }));
+    r.delete('/shares/:id/api-keys/:key', guard(async (req, res) => {
+        const share = await mine(req, res);
+        if (!share) return undefined;
+        await apiKeys.revoke(owner(req), share, req.params.key);
+        return res.status(204).end();
     }));
 
     r.get('/shares/:id/requests', guard(async (req, res) => {

@@ -32,6 +32,7 @@ const { createNodeApi } = require('./http/node-api');
 const { createNodeAuth } = require('./auth/node-auth');
 const { createMachines } = require('./machines');
 const { createHooks } = require('./hooks');
+const { createApiKeys } = require('./api-keys');
 const { createProbe } = require('./probe');
 const { createHookRoutes } = require('./http/hooks');
 const { createServiceOutbox } = require('openvibe-sdk/events');
@@ -83,7 +84,9 @@ async function createApp(opts = {}) {
         if (waiting.length) log.log(`[OpenVibe.Connect] told ${waiting.length} person(s) ${share.host} is back`);
     } });
     const gate = createGate({ config, now: s.now });
-    const proxy = createProxy({ config, shares, tunnels, gate, log, now: s.now });
+    // API keys for a share (CON-16 v0): a program passes the gate with one; it opens the share's API, never its pages.
+    const apiKeys = createApiKeys(s, { now: s.now });
+    const proxy = createProxy({ config, shares, tunnels, gate, apiKeys, log, now: s.now });
 
     const accountData = accountDataLib.create({ db: s.db, log });
     const accountSend = opts.accountSend || (config.oauth.clientSecret
@@ -100,7 +103,7 @@ async function createApp(opts = {}) {
     });
     const hooks = createHooks(s, { config, outbox, now: s.now });
 
-    const ctx = { config, s, keys, sso, principal, shares, tunnels, gate, proxy, notifier, nodeAuth, machines, hooks, outbox, accountData, accountSend, log };
+    const ctx = { config, s, keys, sso, principal, shares, tunnels, gate, proxy, apiKeys, notifier, nodeAuth, machines, hooks, outbox, accountData, accountSend, log };
     ctx.probe = createProbe({ shares, proxy, config, log, now: s.now });
     ctx.probeDelayMs = opts.probeDelayMs != null ? opts.probeDelayMs : 10_000;
 
