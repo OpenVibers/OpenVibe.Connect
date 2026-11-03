@@ -31,6 +31,9 @@ const { createApi } = require('./http/api');
 const { createNodeApi } = require('./http/node-api');
 const { createNodeAuth } = require('./auth/node-auth');
 const { createMachines } = require('./machines');
+const { createHooks } = require('./hooks');
+const { createHookRoutes } = require('./http/hooks');
+const { createServiceOutbox } = require('openvibe-sdk/events');
 const { createPageRoutes } = require('./http/pages');
 const { createServiceReadiness } = require('./observability');
 const { assetVersion, setRelease } = require('./render/layout');
@@ -79,7 +82,17 @@ async function createApp(opts = {}) {
         ? createNetworkSender({ networkInternalUrl: config.networkInternalUrl, clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret, fetch: fetchImpl })
         : async () => { throw new Error('OV_OAUTH_CLIENT_SECRET is not set: Connect cannot answer account events'); });
 
-    const ctx = { config, s, keys, sso, principal, shares, tunnels, gate, proxy, notifier, nodeAuth, machines, accountData, accountSend, log };
+    // Hooks that wait for your computer (CON-15): a webhook and its pointer commit together; the relay (started in
+    // index.js, never in drill mode) publishes the pointer to OpenVibe.Events with Connect's own token.
+    const outbox = opts.outbox !== undefined ? opts.outbox : createServiceOutbox({
+        db: s.db, source: 'connect', eventsUrl: config.events.url, networkInternalUrl: config.networkInternalUrl,
+        clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret, fetch: fetchImpl, log, now: s.now,
+        table: 'service_outbox', eventTypes: ['connect.hook.received'],
+        validate: (env) => contracts.validate('events.event-envelope@1', env),
+    });
+    const hooks = createHooks(s, { config, outbox, now: s.now });
+
+    const ctx = { config, s, keys, sso, principal, shares, tunnels, gate, proxy, notifier, nodeAuth, machines, hooks, outbox, accountData, accountSend, log };
 
     /** Shares whose time is up close themselves (CON-6): their computers are disconnected and their lists forgotten. */
     ctx.expireSweep = async () => {
@@ -87,6 +100,8 @@ async function createApp(opts = {}) {
         try { due = await shares.expireDue(); } catch (err) { log.warn('[OpenVibe.Connect] expiry sweep failed:', err.message); return []; }
         due.forEach((r) => { tunnels.close(r.id, 4003, 'the share ended'); proxy.forget(r.host); proxy.inspector.forget(r.id); });
         if (due.length) log.log(`[OpenVibe.Connect] ${due.length} share(s) ended on time`);
+        // Webhooks kept past their 7 days go, delivered or not (CON-15).
+        try { const gone = await hooks.sweep(); if (gone) log.log(`[OpenVibe.Connect] ${gone} webhook(s) past 7 days removed`); } catch (err) { log.warn('[OpenVibe.Connect] webhook sweep failed:', err.message); }
         return due;
     };
     if (opts.expirySweep !== false) {
@@ -167,6 +182,9 @@ async function createApp(opts = {}) {
     app.use('/auth/', rateLimit({ windowMs: 15 * 60_000, limit: 60, standardHeaders: true, legacyHeaders: false }));
     app.use('/auth', sso.routes());
     { const legal = require('openvibe-shared/legal'); app.get(legal.PATHS, legal.handler({ id: 'connect', service: 'connect', host: 'connect.openvibe.website', name: 'OpenVibe Connect', profile: 'ugc' })); }
+
+    // ── Webhooks to a share's hooks, and Events' deliveries of them back (CON-15; /internal/ is loopback only) ──
+    app.use(createHookRoutes(ctx));
 
     // ── OpenVibe.Events → this service (loopback only; nginx answers 404 for /internal/) ──
     app.use('/internal/events', accountData.consumer({

@@ -39,6 +39,28 @@ seconds, one use). It sends a fresh node token before the old one runs out, so a
 serving within about five minutes. While a computer serves a share, the share's key does not work; "Use a connect key
 instead" lets the computer go and shows a new key once (ADR-057 decision 4, CON-4).
 
+### Webhooks that wait for your computer
+
+On a share's page, "Make a webhook address" gives you `https://connect.openvibe.website/h/hk_…` and a path on your app
+(`/webhooks/github`). Give that address to GitHub, Stripe or anything else that sends webhooks. Each webhook is kept for
+up to 7 days and handed to your app, at that path, as soon as your computer is connected, so a laptop that sleeps
+misses nothing (CON-15, ADR-057 decision 7):
+
+- The address takes POST, PUT and PATCH, up to 1 MB and 120 a minute, and answers `202` at once.
+- Connect keeps the method, the provider's headers (`content-type`, `user-agent`, `x-…`, `stripe-signature`,
+  `svix-…`, `webhook-…`; never cookies, authorization or forwarding headers) and the body. It publishes only a
+  pointer, `connect.hook.received`, to OpenVibe.Events, in the same transaction.
+- Events delivers that pointer back to Connect's own subscription, retried for about seven days. Connect hands the
+  webhook to your app with `x-openvibe-hook` and `x-openvibe-event-id` (dedupe on it). Your app's answer below 500 settles it, and
+  its body is dropped. While the computer is offline, or the app answers 5xx, Connect says 503 and Events tries again.
+- Nobody signs in to send a webhook, so check the provider's own signature in your app.
+
+| Call | What |
+|---|---|
+| `GET /api/v1/shares/:id/hooks` | its webhook addresses, with `received`, `delivered` and `waiting` |
+| `POST /api/v1/shares/:id/hooks` `{ path, label? }` | a new address → `201 { hook }` (at most 10 a share) |
+| `DELETE /api/v1/shares/:id/hooks/:hook` | remove it; webhooks still waiting are dropped |
+
 ## What your app sees
 
 - `Host: localhost:<port>`; the share's address in `X-Forwarded-Host`; `X-Forwarded-Proto: https`.
@@ -104,6 +126,7 @@ browser ──https──▶ Cloudflare ──▶ nginx ──▶ Connect (5240)
   no bodies; a restart forgets them.
 - `server/auth/node-auth.js` — a computer as OpenVibe Node: its node token, and the single-use tunnel tokens (CON-4).
 - `server/machines.js` — the owner's computers, read from Network with the owner's own token.
+- `server/hooks.js`, `server/http/hooks.js` — webhook addresses, the kept webhooks, and Events' deliveries (CON-15).
 - `public/ov-connect.js` — the client.
 
 The v0 transport is a WebSocket on 443 through Cloudflare (ADR-057's fallback path), so nothing needs a UDP port or a

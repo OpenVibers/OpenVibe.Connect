@@ -60,13 +60,47 @@ async function start() {
         clientSecret: config.oauth.clientSecret,
         log: ctx.log || console,
     });
-    const extra = [() => { if (subs) subs.stop(); }];
+    // Hooks (CON-15): the outbox relay publishes webhook pointers, and Connect's own subscription brings them back to
+    // /internal/hook-deliveries, retried for about seven days while a computer is offline. Off in drill mode and
+    // without the events URL, the delivery secret and the client secret.
+    const hookSubs = config.drill ? null : ensureHookSubscription({ config, log: ctx.log || console });
+    if (!config.drill && ctx.outbox) ctx.outbox.start();
+    const extra = [() => { if (subs) subs.stop(); }, () => { if (hookSubs) hookSubs.stop(); }, () => { if (ctx.outbox) ctx.outbox.stop(); }];
     createLifecycle({ server, ctx, extra });
     return { server, ctx };
+}
+
+// About seven days of retries (Events allows 20 attempts, each wait at most a day): 5 s, 30 s, 2 min, 10 min, 30 min,
+// 1, 2, 3, 4, 6, 8 hours, four of 12 hours and four of a day.
+const HOOK_BACKOFF_MS = [5e3, 30e3, 120e3, 600e3, 1800e3, 3600e3, 7200e3, 10800e3, 14400e3, 21600e3, 28800e3,
+    43200e3, 43200e3, 43200e3, 43200e3, 86400e3, 86400e3, 86400e3, 86400e3];
+
+/** Connect's subscription to its own connect.hook.received, made once (409 means it is there); tried again every 10 minutes until it is. */
+function ensureHookSubscription({ config, log = console, fetchImpl = globalThis.fetch }) {
+    const secret = config.events.secrets[0] || '';
+    if (!config.events.url || !secret || !config.oauth.clientSecret) { log.warn('[OpenVibe.Connect] webhook deliveries off: CONNECT_EVENTS_URL, CONNECT_EVENTS_SECRET or the client secret is unset'); return null; }
+    const { serviceAuth } = require('openvibe-contracts');
+    const tokens = serviceAuth.createTokenClient({ tokenUrl: `${config.networkInternalUrl}/oauth/token`, clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret, audience: 'openvibe.events', scope: 'events.subscription.manage', fetchImpl });
+    let timer = null;
+    let stopped = false;
+    async function once() {
+        try {
+            const res = await fetchImpl(`${config.events.url}/api/v1/subscriptions`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(await tokens.authHeaders()) },
+                body: JSON.stringify({ topic_pattern: 'connect.hook.received', endpoint: `http://127.0.0.1:${config.port}/internal/hook-deliveries`, secret, retry_policy: { max_attempts: 20, backoff_ms: HOOK_BACKOFF_MS } }),
+                signal: AbortSignal.timeout(10_000),
+            });
+            if (res.status === 201 || res.status === 409) { log.log(`[OpenVibe.Connect] webhook deliveries subscribed (${res.status})`); return; }
+            log.warn(`[OpenVibe.Connect] webhook subscription not made: HTTP ${res.status}`);
+        } catch (err) { log.warn(`[OpenVibe.Connect] webhook subscription not made: ${err.message}`); }
+        if (!stopped) { timer = setTimeout(once, 600_000); timer.unref(); }
+    }
+    once();
+    return { stop() { stopped = true; clearTimeout(timer); } };
 }
 
 if (require.main === module) {
     start().catch((err) => { console.error('[OpenVibe.Connect] failed to start:', err); process.exit(1); });
 }
 
-module.exports = { start, createLifecycle };
+module.exports = { start, createLifecycle, ensureHookSubscription, HOOK_BACKOFF_MS };

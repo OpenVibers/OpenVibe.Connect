@@ -14,6 +14,9 @@
  *   PUT    /shares/:id/node      { node: 'nod_…' } one of your computers serves it, as OpenVibe Node (CON-4): the key
  *                                stops working → { share }; { node: null } lets the computer go → { share, key } (a new key)
  *   GET    /machines             your computers that can serve a share (Network's list of your machines)
+ *   GET    /shares/:id/hooks     its webhook addresses (CON-15): each kept webhook waits up to 7 days for the computer
+ *   POST   /shares/:id/hooks     { path, label? } → 201 { hook }: https://connect.openvibe.website/h/<id> → that path
+ *   DELETE /shares/:id/hooks/:hook  removes it; webhooks still waiting are dropped
  *   GET    /shares/:id/visits    who opened it in the last 7 days
  *   GET    /shares/:id/requests  the last 100 requests through it, newest first (?after=<seq>: only newer ones);
  *                                memory only, query values shown as "…" (edge/inspector.js)
@@ -24,9 +27,10 @@ const express = require('express');
 const { http } = require('openvibe-contracts');
 const { asyncRouter } = require('./router');
 const { ShareError } = require('../shares');
+const { HookError } = require('../hooks');
 
 function createApi(ctx) {
-    const { shares, tunnels, principal, proxy, machines } = ctx;
+    const { shares, tunnels, principal, proxy, machines, hooks } = ctx;
     const r = asyncRouter();
     r.use(express.json({ limit: '16kb' }));
     r.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
@@ -38,7 +42,7 @@ function createApi(ctx) {
     const shape = (s) => ({ ...s, connected: tunnels.isConnected(s.id) });
     const guard = (fn) => async (req, res) => {
         try { return await fn(req, res); } catch (err) {
-            if (err instanceof ShareError) return fail(res, req, err.status, err.code, err.message);
+            if (err instanceof ShareError || err instanceof HookError) return fail(res, req, err.status, err.code, err.message);
             throw err;
         }
     };
@@ -112,6 +116,24 @@ function createApi(ctx) {
         const { share: updated } = await shares.bindNode(owner(req), share.id, found.machine);
         tunnels.close(share.id, 4003, 'now served by one of your computers');
         return res.json({ share: shape(updated) });
+    }));
+
+    r.get('/shares/:id/hooks', guard(async (req, res) => {
+        const share = await mine(req, res);
+        return share ? res.json({ hooks: await hooks.list(share.id) }) : undefined;
+    }));
+    r.post('/shares/:id/hooks', guard(async (req, res) => {
+        const share = await mine(req, res);
+        if (!share) return undefined;
+        const b = req.body || {};
+        return res.status(201).json({ hook: await hooks.create(owner(req), share, { path: b.path, label: b.label }) });
+    }));
+    r.delete('/shares/:id/hooks/:hook', guard(async (req, res) => {
+        const share = await mine(req, res);
+        if (!share) return undefined;
+        const hook = await hooks.get(req.params.hook);
+        if (!hook || hook.share_id !== share.id) return fail(res, req, 404, 'hook.not_found', 'No such webhook address.');
+        return res.json({ hook: await hooks.remove(owner(req), hook.id) });
     }));
 
     r.get('/shares/:id/requests', guard(async (req, res) => {
