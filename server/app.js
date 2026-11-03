@@ -6,6 +6,7 @@
  *
  *   <label>--<user>.openvibe.website/*   a share: the gate, then the tunnel (edge/proxy.js), before anything else
  *   /, /shares/*, /grant                  the pages (http/pages.js)
+ *   /api/v1/node/*                        a person's computer as OpenVibe Node (http/node-api.js, CON-4)
  *   /api/v1/*                             the API (http/api.js)
  *   /ov-connect.js                        the client, served as it is in public/
  *   /auth/*                               Network SSO with PKCE (auth/sso.js)
@@ -27,6 +28,9 @@ const { createKeyStore } = require('./auth/keys');
 const { createSso } = require('./auth/sso');
 const { createPrincipal } = require('./http/principal');
 const { createApi } = require('./http/api');
+const { createNodeApi } = require('./http/node-api');
+const { createNodeAuth } = require('./auth/node-auth');
+const { createMachines } = require('./machines');
 const { createPageRoutes } = require('./http/pages');
 const { createServiceReadiness } = require('./observability');
 const { assetVersion, setRelease } = require('./render/layout');
@@ -59,7 +63,10 @@ async function createApp(opts = {}) {
     const shares = createShares(s, { config });
     // "Tell me when it's back" (CON-17): when a share's computer connects, everyone waiting on it gets one notification.
     const notifier = opts.notifier || require('./notify').createNotifier({ config, fetchImpl, log });
-    const tunnels = createTunnels({ shares, config, log, onConnect: async (share) => {
+    // A person's computer as OpenVibe Node (CON-4): its node token and a single-use tunnel token; its owner's machines.
+    const nodeAuth = createNodeAuth({ config, keys, now: s.now });
+    const machines = opts.machines || createMachines({ config, fetchImpl, log, now: s.now });
+    const tunnels = createTunnels({ shares, config, log, nodeAuth, now: s.now, onConnect: async (share) => {
         const waiting = await shares.takeWaiters(share.id);
         for (const subject of waiting) await notifier.shareBack(subject, share);
         if (waiting.length) log.log(`[OpenVibe.Connect] told ${waiting.length} person(s) ${share.host} is back`);
@@ -72,7 +79,7 @@ async function createApp(opts = {}) {
         ? createNetworkSender({ networkInternalUrl: config.networkInternalUrl, clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret, fetch: fetchImpl })
         : async () => { throw new Error('OV_OAUTH_CLIENT_SECRET is not set: Connect cannot answer account events'); });
 
-    const ctx = { config, s, keys, sso, principal, shares, tunnels, gate, proxy, notifier, accountData, accountSend, log };
+    const ctx = { config, s, keys, sso, principal, shares, tunnels, gate, proxy, notifier, nodeAuth, machines, accountData, accountSend, log };
 
     /** Shares whose time is up close themselves (CON-6): their computers are disconnected and their lists forgotten. */
     ctx.expireSweep = async () => {
@@ -186,6 +193,7 @@ async function createApp(opts = {}) {
 
     // ── API ─────────────────────────────────────────────────
     app.use('/api/v1', rateLimit({ windowMs: 60_000, limit: Number(process.env.CONNECT_API_RATE_LIMIT_PER_MIN) || 240, standardHeaders: true, legacyHeaders: false, handler: (req, res) => contracts.http.sendProblem(res, 429, 'rate_limited', { detail: 'too many requests from this address; retry shortly', ctx: req.ov }) }));
+    app.use('/api/v1/node', createNodeApi(ctx));
     app.use('/api/v1', createApi(ctx));
     app.use('/api', (req, res) => contracts.http.sendProblem(res, 404, 'route.not_found', { detail: 'No such API route', ctx: req.ov }));
 

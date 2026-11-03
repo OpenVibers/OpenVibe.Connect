@@ -132,6 +132,19 @@
 .cn-run { display: grid; gap: 10px; }
 .cn-run h2 { margin: 0; }
 .cn-run a { color: var(--room-strong); }
+/* Which computer serves it (CON-4): the owner's machines, one row each with its button; the bound one's commands. */
+.cn-node { display: grid; gap: 10px; }
+.cn-node h2 { margin: 0; }
+.cn-node p { margin: 0; color: var(--ovk-muted); }
+.cn-node p b { color: var(--ovk-text); }
+.cn-node a { color: var(--room-strong); }
+.cn-node > form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.cn-node > form span { font-size: 13.5px; color: var(--ovk-muted); flex: 1 1 220px; }
+.cn-machines { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cn-machines li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 14px; border-radius: 10px; background: var(--ovk-panel); border: 1px solid var(--ovk-line); }
+.cn-machine { display: grid; gap: 2px; min-width: 0; }
+.cn-machine b { overflow-wrap: anywhere; }
+.cn-machine small { color: var(--ovk-muted); font-size: 13px; }
 .cn-visits { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .cn-visits li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding: 10px 14px; border-radius: 10px; background: var(--ovk-panel); border: 1px solid var(--ovk-line); }
 .cn-visits span { color: var(--ovk-muted); font-size: 14px; }

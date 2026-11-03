@@ -9,6 +9,13 @@
  *   tunnel.open({ onRes, onData, onEnd, onAbort, onPause, onResume }) → stream id
  *   tunnel.send(obj), tunnel.data(id, buf), tunnel.end(id), tunnel.abort(id, code, message), tunnel.release(id)
  *
+ * A computer bound to a share as OpenVibe Node (CON-4) says hello with two credentials instead of a key:
+ * { t: 'hello', share: 'shr_…', node_token: <its Network node token>, tunnel: 'ovt_…' } (server/auth/node-auth.js). Its
+ * node token lasts 300 s, so it sends { t: 'reauth', node_token } with a fresh one before then (answered
+ * { t: 'reauthed', until }); a tunnel whose token ran out is closed (4000, the computer reconnects), so a computer
+ * removed on Network loses its shares within about five minutes. A refused node token is 4002 and a share this
+ * computer does not serve is 4003 (the computer stops both); a spent or late tunnel token is 4000 (it asks again).
+ *
  * A newer connection for the same share replaces the older one (close code 4001), so a laptop that reconnects after
  * sleep never leaves a dead tunnel behind. A wrong key is 4002; a revoked share or a rotated key closes its tunnel
  * (4003); a tunnel that stops answering pings is 4008. The server
@@ -91,13 +98,25 @@ class Tunnel {
     }
 }
 
-function createTunnels({ shares, config, log = console, onConnect = null }) {
+// How long past its node token's expiry a computer's tunnel may stay open while its reauth is on the way.
+const REAUTH_GRACE_MS = 30_000;
+
+function createTunnels({ shares, config, log = console, onConnect = null, nodeAuth = null, now = () => Date.now() }) {
     const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024, perMessageDeflate: false });
     const live = new Map();   // share id → Tunnel
     const stats = { connects: 0, refused: 0, replaced: 0 };
 
+    /** Close every computer's tunnel whose node token ran out with no reauth (CON-4); the computer reconnects. */
+    function sweep() {
+        let n = 0;
+        for (const t of live.values()) if (t.authUntil && now() > t.authUntil + REAUTH_GRACE_MS) { t.shutdown(4000, 'the node token ran out'); n++; }
+        return n;
+    }
+
     const pinger = setInterval(() => {
+        sweep();
         for (const t of live.values()) {
+            if (t.closed) continue;
             if (!t.alive) { t.shutdown(4008, 'no answer to ping'); continue; }
             t.alive = false;
             try { t.ws.ping(); } catch { /* closing */ }
@@ -108,8 +127,10 @@ function createTunnels({ shares, config, log = console, onConnect = null }) {
     function refuse(ws, code, message) {
         stats.refused++;
         try { ws.send(JSON.stringify({ t: 'error', code, message })); } catch { /* gone */ }
-        // 4002: the key is wrong, 4003: the share is closed (the client stops for both); 4000: anything else.
-        try { ws.close(code === 'key_invalid' ? 4002 : code === 'share_revoked' ? 4003 : 4000, message.slice(0, 120)); } catch { /* gone */ }
+        // 4002: the key (or the computer's node token) is wrong, 4003: the share is closed or not this computer's (the
+        // client stops for both); 4000: anything else, the client tries again.
+        const close = code === 'key_invalid' || code === 'node_invalid' ? 4002 : code === 'share_revoked' || code === 'node_not_bound' ? 4003 : 4000;
+        try { ws.close(close, message.slice(0, 120)); } catch { /* gone */ }
     }
 
     function accept(ws) {
@@ -125,7 +146,15 @@ function createTunnels({ shares, config, log = console, onConnect = null }) {
             }
         });
         ws.on('message', async (message, isBinary) => {
-            if (tunnel) { tunnel.alive = true; return tunnel.onMessage(message, isBinary); }
+            if (tunnel) {
+                tunnel.alive = true;
+                if (tunnel.node && !isBinary && message.length < 8192 && String(message).includes('"reauth"')) {
+                    let r = null;
+                    try { r = JSON.parse(String(message)); } catch { /* not ours */ }
+                    if (r && r.t === 'reauth') return reauth(tunnel, r);
+                }
+                return tunnel.onMessage(message, isBinary);
+            }
             if (isBinary) return refuse(ws, 'hello_expected', 'The first message is the hello.');
             let m;
             try { m = JSON.parse(String(message)); } catch { return refuse(ws, 'hello_expected', 'The first message is the hello.'); }
@@ -133,10 +162,26 @@ function createTunnels({ shares, config, log = console, onConnect = null }) {
             clearTimeout(hello);
             if (m.v !== frames.VERSION) return refuse(ws, 'version', `This server speaks ${frames.PROTOCOL}. Download the client again from ${config.baseUrl}/ov-connect.js`);
             let share;
-            try { share = await shares.byKey(m.key); } catch (err) { log.warn('[OpenVibe.Connect] key lookup failed:', err.message); return refuse(ws, 'unavailable', 'Try again in a moment.'); }
-            if (!share) return refuse(ws, 'key_invalid', 'That connect key is not one we know. Make a new one on your share page.');
-            if (share.status !== 'active') return refuse(ws, 'share_revoked', 'That share is closed.');
+            let node = null;
+            if (m.key === undefined && (m.node_token !== undefined || m.tunnel !== undefined)) {
+                // A computer as OpenVibe Node (CON-4): its node token and a tunnel token, both checked.
+                if (!nodeAuth) return refuse(ws, 'unavailable', 'Try again in a moment.');
+                const v = await nodeAuth.verify(m.node_token);
+                if (!v.ok) return v.status === 503 ? refuse(ws, 'unavailable', 'Try again in a moment.') : refuse(ws, 'node_invalid', 'OpenVibe did not take this computer\'s node token. Pair it with OpenVibe again.');
+                try { share = await shares.get(typeof m.share === 'string' ? m.share.slice(0, 64) : ''); } catch (err) { log.warn('[OpenVibe.Connect] share lookup failed:', err.message); return refuse(ws, 'unavailable', 'Try again in a moment.'); }
+                // The ticket is spent whatever happens next: one try each.
+                const ticket = share ? nodeAuth.redeem(m.tunnel, share.id, v.node) : false;
+                if (!share || !share.node || share.node.id !== v.node) return refuse(ws, 'node_not_bound', 'This computer does not serve that share. Pick it on the share\'s page.');
+                if (share.status !== 'active') return refuse(ws, 'share_revoked', 'That share is closed.');
+                if (!ticket) return refuse(ws, 'tunnel_token', 'That tunnel token is spent or late. Ask for a new one.');
+                node = v;
+            } else {
+                try { share = await shares.byKey(m.key); } catch (err) { log.warn('[OpenVibe.Connect] key lookup failed:', err.message); return refuse(ws, 'unavailable', 'Try again in a moment.'); }
+                if (!share) return refuse(ws, 'key_invalid', 'That connect key is not one we know. Make a new one on your share page.');
+                if (share.status !== 'active') return refuse(ws, 'share_revoked', 'That share is closed.');
+            }
             const t = new Tunnel(ws, share, { log, maxStreams: config.shares.maxStreams });
+            if (node) { t.node = node.node; t.authUntil = node.exp; }
             t.clientInfo = { client: String(m.client || '').slice(0, 60), port: Number.isInteger(m.port) ? m.port : null };
             const old = live.get(share.id);
             if (old) { stats.replaced++; old.shutdown(4001, 'replaced by a newer connection'); }
@@ -146,9 +191,21 @@ function createTunnels({ shares, config, log = console, onConnect = null }) {
             shares.touchConnected(share.id).catch(() => {});
             // The people who asked to be told it is back (CON-17); never in the way of the connection.
             if (onConnect) Promise.resolve().then(() => onConnect(share)).catch(() => {});
-            t.send({ t: 'ready', v: frames.VERSION, share: { id: share.id, host: share.host, url: share.url, mode: share.mode } });
+            t.send({ t: 'ready', v: frames.VERSION, share: { id: share.id, host: share.host, url: share.url, mode: share.mode, local_port: share.local_port }, ...(node ? { node: true, until: new Date(node.exp).toISOString() } : {}) });
             return undefined;
         });
+    }
+
+    /** A fresh node token from a computer's open tunnel: the same computer, still bound to the share. */
+    async function reauth(t, m) {
+        const v = nodeAuth ? await nodeAuth.verify(m.node_token) : { ok: false, status: 503 };
+        if (!v.ok && v.status === 503) return t.send({ t: 'error', code: 'unavailable', message: 'Try again in a moment.' });
+        if (!v.ok || v.node !== t.node) { stats.refused++; return t.shutdown(4002, 'node token refused'); }
+        let share = null;
+        try { share = await shares.get(t.share.id); } catch { return t.send({ t: 'error', code: 'unavailable', message: 'Try again in a moment.' }); }
+        if (!share || share.status !== 'active' || !share.node || share.node.id !== v.node) return t.shutdown(4003, 'this computer no longer serves the share');
+        t.authUntil = v.exp;
+        return t.send({ t: 'reauthed', until: new Date(v.exp).toISOString() });
     }
 
     function handleUpgrade(req, socket, head) {
@@ -173,7 +230,7 @@ function createTunnels({ shares, config, log = console, onConnect = null }) {
         return { connected: live.size, streams: [...live.values()].reduce((n, t) => n + t.streams.size, 0), ...stats };
     }
 
-    return { handleUpgrade, get: (id) => live.get(id) || null, close, closeAll, status, isConnected: (id) => live.has(id) };
+    return { handleUpgrade, get: (id) => live.get(id) || null, close, closeAll, status, sweep, isConnected: (id) => live.has(id) };
 }
 
 module.exports = { createTunnels, Tunnel, HIGH_WATER };

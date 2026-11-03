@@ -23,6 +23,22 @@ Live at **[connect.openvibe.website](https://connect.openvibe.website)**. Part o
 The client opens one outgoing connection, so it works behind any router or hotspot, and it reconnects by itself. It
 only ever connects to `localhost` on the port you gave it.
 
+### From a computer with OpenVibe Node (no key)
+
+A computer you added on [openvibe.bot/machines](https://openvibe.bot/machines) runs OpenVibe Node and has its own
+OpenVibe sign-in. On the share's page, pick it under "Or serve it from one of your computers", then on that computer:
+
+```bash
+openvibe-node share --share shr_…                # serve it now
+sudo openvibe-node share add --share shr_…       # or keep it up with the Node service
+```
+
+There is no key to copy. The computer proves itself twice at every connection: with its Network node token (subject
+`node:nod_…`, audience `openvibe.website`, 5 minutes) and with a tunnel token Connect gives it for that one share (60
+seconds, one use). It sends a fresh node token before the old one runs out, so a computer removed on OpenVibe stops
+serving within about five minutes. While a computer serves a share, the share's key does not work; "Use a connect key
+instead" lets the computer go and shows a new key once (ADR-057 decision 4, CON-4).
+
 ## What your app sees
 
 - `Host: localhost:<port>`; the share's address in `X-Forwarded-Host`; `X-Forwarded-Proto: https`.
@@ -61,6 +77,15 @@ With a person's OpenVibe token as a Bearer (or the session on connect.openvibe.w
 | `POST /api/v1/shares/:id/key` | a new key → `{ share, key }`; the connected computer is disconnected |
 | `GET /api/v1/shares/:id/visits` | who opened it in the last 7 days |
 | `GET /api/v1/shares/:id/requests` `?after=<seq>` | the last 100 requests through it, newest first (the inspector, below) |
+| `GET /api/v1/machines` | your computers that can serve a share (OpenVibe Node, from Network) |
+| `PUT /api/v1/shares/:id/node` `{ node: 'nod_…' \| null }` | one of your computers serves it (the key stops working) → `{ share }`; `null` lets it go → `{ share, key }` |
+
+A computer, with its Network node token (audience `openvibe.website`) as a Bearer:
+
+| Call | What |
+|---|---|
+| `GET /api/v1/node/shares` | the open shares this computer serves: `id`, `host`, `url`, `local_port`, `mode` |
+| `POST /api/v1/node/shares/:id/tunnel-token` | `{ tunnel_token, expires_in: 60, share }`, for one hello on `/tunnel`: `{ t: 'hello', v: 1, share, node_token, tunnel }`, then `{ t: 'reauth', node_token }` before the node token runs out |
 
 ## How it works
 
@@ -77,6 +102,8 @@ browser ──https──▶ Cloudflare ──▶ nginx ──▶ Connect (5240)
 - `server/edge/inspector.js` — the share page's Requests list (CON-8 v0): the last 100 requests per share, in memory
   only, with the method, the path (query values shown as "…"), status, time, bytes and the visitor's name. No headers,
   no bodies; a restart forgets them.
+- `server/auth/node-auth.js` — a computer as OpenVibe Node: its node token, and the single-use tunnel tokens (CON-4).
+- `server/machines.js` — the owner's computers, read from Network with the owner's own token.
 - `public/ov-connect.js` — the client.
 
 The v0 transport is a WebSocket on 443 through Cloudflare (ADR-057's fallback path), so nothing needs a UDP port or a
