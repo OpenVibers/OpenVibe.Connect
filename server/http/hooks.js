@@ -3,11 +3,11 @@
 /**
  * Hooks that wait for your computer (CON-15): the address providers send to, and Events' deliveries back.
  *
- *   POST|PUT|PATCH /h/:id              a provider's webhook (1 MB): kept 7 days, its pointer published → 202
+ *   POST|PUT|PATCH /h/:id              a provider's webhook (1 MB): sealed, kept 72 hours, its pointer published → 202
  *   POST /internal/hook-deliveries     Events, signed v2, loopback only (nginx answers 404 for /internal/): the
  *                                      webhook goes to the share's computer. 200 once its app answered (any status
  *                                      below 500) or when the webhook is gone; 503 while the computer is offline or
- *                                      its app fails, so Events tries again (up to seven days, server/index.js).
+ *                                      its app fails, so Events tries again (up to 72 hours, server/index.js).
  */
 const express = require('express');
 const { parseDelivery } = require('openvibe-sdk/events');
@@ -39,9 +39,12 @@ function createHookRoutes(ctx) {
         if (tooMany(hook.id)) return answer(res.set('Retry-After', '60'), 429, { error: 'rate_limited', detail: `At most ${PER_HOOK_MINUTE} webhooks a minute to one address.` });
         try {
             const { ref } = await hooks.receive(hook, { method: req.method, headers: req.headers, body: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0) });
-            return answer(res, 202, { received: true, id: ref, delivered_when: 'the computer is connected (kept up to 7 days)' });
+            return answer(res, 202, { received: true, id: ref, delivered_when: 'the computer is connected (kept up to 72 hours)' });
         } catch (err) {
-            if (err instanceof HookError) return answer(res, err.status, { error: err.code, detail: err.message });
+            if (err instanceof HookError) {
+                if (err.code === 'hook.queue_full') res.set('Retry-After', '300');
+                return answer(res, err.status, { error: err.code, detail: err.message });
+            }
             log.warn('[OpenVibe.Connect] webhook not kept:', err && err.message);
             return answer(res.set('Retry-After', '30'), 503, { error: 'unavailable', detail: 'Try again shortly.' });
         }
@@ -61,9 +64,12 @@ function createHookRoutes(ctx) {
         if (!stored) return res.status(200).json({ gone: true });
         const share = await shares.get(stored.shareId);
         if (!share || share.status !== 'active') return res.status(200).json({ gone: true });
-        const out = await proxy.deliverHook(share, { method: stored.method, path: stored.path, headers: stored.headers, body: stored.body, hookId: stored.hookId, eventId: e.event_id });
+        const out = await proxy.deliverHook(share, { method: stored.method, path: stored.path, headers: stored.headers, body: stored.body, hookId: stored.hookId, eventId: e.event_id, receivedAt: stored.receivedAt });
         if (out.offline) return res.status(503).set('Retry-After', '300').json({ waiting: 'the computer is not connected' });
-        if (!out.status || out.status >= 500) return res.status(503).json({ retry: out.error || `the app answered ${out.status}` });
+        if (!out.status || out.status >= 500) {
+            await hooks.fail(stored.ref, out.status || null, out.error || `the app answered ${out.status}`);
+            return res.status(503).json({ retry: out.error || `the app answered ${out.status}` });
+        }
         await hooks.settle(stored.ref, out.status);
         return res.status(200).json({ delivered: true, status: out.status });
     });

@@ -15,9 +15,10 @@
  *   PUT    /shares/:id/node      { node: 'nod_…' } one of your computers serves it, as OpenVibe Node (CON-4): the key
  *                                stops working → { share }; { node: null } lets the computer go → { share, key } (a new key)
  *   GET    /machines             your computers that can serve a share (Network's list of your machines)
- *   GET    /shares/:id/hooks     its webhook addresses (CON-15): each kept webhook waits up to 7 days for the computer
+ *   GET    /shares/:id/hooks     its webhook addresses (CON-15): each kept webhook waits up to 72 hours for the computer
  *   POST   /shares/:id/hooks     { path, label? } → 201 { hook }: https://connect.openvibe.website/h/<id> → that path
  *   DELETE /shares/:id/hooks/:hook  removes it; webhooks still waiting are dropped
+ *   GET    /shares/:id/hooks/:hook/deliveries  the owner's log: what the app answered, and when
  *   GET    /shares/:id/visits    who opened it in the last 7 days
  *   GET    /shares/:id/requests  the last 100 requests through it, newest first (?after=<seq>: only newer ones);
  *                                memory only, query values shown as "…" (edge/inspector.js)
@@ -136,6 +137,13 @@ function createApi(ctx) {
         const hook = await hooks.get(req.params.hook);
         if (!hook || hook.share_id !== share.id) return fail(res, req, 404, 'hook.not_found', 'No such webhook address.');
         return res.json({ hook: await hooks.remove(owner(req), hook.id) });
+    }));
+    r.get('/shares/:id/hooks/:hook/deliveries', guard(async (req, res) => {
+        const share = await mine(req, res);
+        if (!share) return undefined;
+        const hook = await hooks.get(req.params.hook);
+        if (!hook || hook.share_id !== share.id) return fail(res, req, 404, 'hook.not_found', 'No such webhook address.');
+        return res.json({ deliveries: await hooks.deliveries(share.id, hook.id, req.query.limit) });
     }));
 
     // API keys (CON-16 v0): a program passes the gate with one. The key is in the answer that makes it, never again.

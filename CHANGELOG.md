@@ -4,6 +4,11 @@ What changed in OpenVibe Connect, newest first.
 
 ## Unreleased — 2026-11-03
 
+- Durable webhooks, hardened (CON-15): a share holds at most 1,000 waiting webhooks for 72 hours, every body is
+  sealed at rest with a key derived from the session secret, and the app gets `x-openvibe-received-at` so it keeps the
+  original arrival time. The owner gets a delivery log (page and `GET /api/v1/shares/:id/hooks/:hook/deliveries`).
+  Events' retries now span the same 72 hours. Migration `0012_hook_deliveries`.
+
 - MCP OAuth 2.1 (CON-16): a share's address works as a connector in Claude or any MCP client. The client is sent to
   Connect to sign the person in with OpenVibe: protected-resource metadata on the share, then registration, authorize
   with PKCE S256 and consent, then tokens bound to that share and rotated on refresh. The owner sees and signs out each

@@ -42,25 +42,29 @@ instead" lets the computer go and shows a new key once (ADR-057 decision 4, CON-
 ### Webhooks that wait for your computer
 
 On a share's page, "Make a webhook address" gives you `https://connect.openvibe.website/h/hk_…` and a path on your app
-(`/webhooks/github`). Give that address to GitHub, Stripe or anything else that sends webhooks. Each webhook is kept for
-up to 7 days and handed to your app, at that path, as soon as your computer is connected, so a laptop that sleeps
-misses nothing (CON-15, ADR-057 decision 7):
+(`/webhooks/github`). Give that address to GitHub, Stripe or anything else that sends webhooks. Each webhook is sealed,
+kept for up to 72 hours and handed to your app, at that path, as soon as your computer is connected, so a laptop that
+sleeps misses nothing (CON-15, ADR-057 decision 7):
 
-- The address takes POST, PUT and PATCH, up to 1 MB and 120 a minute, and answers `202` at once.
-- Connect keeps the method, the provider's headers (`content-type`, `user-agent`, `x-…`, `stripe-signature`,
-  `svix-…`, `webhook-…`; never cookies, authorization or forwarding headers) and the body. It publishes only a
-  pointer, `connect.hook.received`, to OpenVibe.Events, in the same transaction.
+- The address takes POST, PUT and PATCH, up to 1 MB and 120 a minute, and answers `202` at once. A share holds at most
+  1,000 waiting webhooks; after that the address answers `429` and the provider retries.
+- Connect keeps the method, the provider's headers minus hop-by-hop, credential and forwarding headers, and the body.
+  The body is sealed at rest with a key derived from the service's session secret and is never readable from the
+  database alone. It publishes only a pointer, `connect.hook.received`, to OpenVibe.Events, in the same transaction.
 - The moment the computer connects, Connect hands it every webhook that waited, oldest first. Events also delivers the
-  pointer back to Connect's own subscription, retried for about seven days, which finds it settled. Connect hands the
-  webhook to your app with `x-openvibe-hook` and `x-openvibe-event-id` (dedupe on it). Your app's answer below 500 settles it, and
-  its body is dropped. While the computer is offline, or the app answers 5xx, Connect says 503 and Events tries again.
+  pointer back to Connect's own subscription, retried for about 72 hours, which finds it settled. Connect hands the
+  webhook to your app with `x-openvibe-hook`, `x-openvibe-event-id` (dedupe on it) and `x-openvibe-received-at` (when
+  the provider's webhook first arrived). Your app's answer below 500 settles it, and its body is dropped. While the
+  computer is offline, or the app answers 5xx, Connect says 503 and Events tries again.
+- The share's page and the API's delivery log show what arrived, what the app answered and when (never a body).
 - Nobody signs in to send a webhook, so check the provider's own signature in your app.
 
 | Call | What |
 |---|---|
-| `GET /api/v1/shares/:id/hooks` | its webhook addresses, with `received`, `delivered` and `waiting` |
+| `GET /api/v1/shares/:id/hooks` | its webhook addresses, with `received`, `delivered`, `waiting` and the last deliveries |
 | `POST /api/v1/shares/:id/hooks` `{ path, label? }` | a new address → `201 { hook }` (at most 10 a share) |
 | `DELETE /api/v1/shares/:id/hooks/:hook` | remove it; webhooks still waiting are dropped |
+| `GET /api/v1/shares/:id/hooks/:hook/deliveries` | the delivery log: method, path, status, error and when |
 
 ## What your app sees
 
@@ -187,7 +191,8 @@ browser ──https──▶ Cloudflare ──▶ nginx ──▶ Connect (5240)
   no bodies; a restart forgets them.
 - `server/auth/node-auth.js` — a computer as OpenVibe Node: its node token, and the single-use tunnel tokens (CON-4).
 - `server/machines.js` — the owner's computers, read from Network with the owner's own token.
-- `server/hooks.js`, `server/http/hooks.js` — webhook addresses, the kept webhooks, and Events' deliveries (CON-15).
+- `server/hooks.js`, `server/http/hooks.js` — webhook addresses, the sealed kept webhooks, the 1,000-deep queue, the
+delivery log and Events' deliveries (CON-15).
 - `public/ov-connect.js` — the client.
 
 The v0 transport is a WebSocket on 443 through Cloudflare (ADR-057's fallback path), so nothing needs a UDP port or a

@@ -455,10 +455,11 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = nu
 
     /**
      * One stored webhook to the share's computer (CON-15): the request as it arrived, at the hook's path, with
-     * x-openvibe-hook and x-openvibe-event-id so the app can tell and dedupe. The answer's body is read and dropped.
+     * x-openvibe-hook, x-openvibe-event-id and x-openvibe-received-at (the original arrival time) so the app can tell,
+     * dedupe and preserve order. The answer's body is read and dropped.
      * → { status } when the app answered, { offline: true } with no computer, { error } when it broke on the way.
      */
-    function deliverHook(share, { method, path, headers = [], body, hookId, eventId }) {
+    function deliverHook(share, { method, path, headers = [], body, hookId, eventId, receivedAt }) {
         const tunnel = tunnels.get(share.id);
         if (!tunnel) return Promise.resolve({ offline: true });
         const port = (tunnel.clientInfo && tunnel.clientInfo.port) || share.local_port;
@@ -478,7 +479,9 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = nu
             timer.unref();
             const out = (Array.isArray(headers) ? headers : []).filter((h) => Array.isArray(h) && h.length === 2 && !/^(host|content-length|x-openvibe-)/i.test(String(h[0])));
             out.push(['host', `localhost:${port}`], ['x-forwarded-host', share.host], ['x-forwarded-proto', config.shares.scheme],
-                ['x-openvibe-hook', String(hookId || '')], ['x-openvibe-event-id', String(eventId || '')], ['content-length', String(body ? body.length : 0)]);
+                ['x-openvibe-hook', String(hookId || '')], ['x-openvibe-event-id', String(eventId || '')],
+                ['x-openvibe-received-at', receivedAt ? new Date(receivedAt).toISOString() : new Date().toISOString()],
+                ['content-length', String(body ? body.length : 0)]);
             tunnel.send({ t: 'req', id, method, path, headers: out });
             if (body && body.length) {
                 rec.in += body.length;

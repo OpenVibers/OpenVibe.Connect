@@ -146,6 +146,12 @@
 .cn-keyuse { display: grid; gap: 2px; }
 .cn-hooks .cn-keyuse-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 13px; }
 .cn-hooks .cn-keyuse-list li { display: inline; padding: 0; border: 0; border-radius: 0; background: none; color: var(--ovk-muted); }
+.cn-hooks .cn-delivery-log { flex-basis: 100%; font-size: 13px; color: var(--ovk-muted); }
+.cn-hooks .cn-delivery-log summary { cursor: pointer; }
+.cn-hooks .cn-delivery-log ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 3px; }
+.cn-hooks .cn-delivery-log li { padding: 0; border: 0; border-radius: 0; background: none; justify-content: flex-start; }
+.cn-hooks .cn-delivery-log b { color: var(--ovk-text); font-weight: 600; }
+
 .cn-muted { color: var(--ovk-muted); }
 .cn-hook-add { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; }
 .cn-hook-add .cn-field { flex: 1 1 200px; }

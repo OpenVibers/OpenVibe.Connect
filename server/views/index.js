@@ -264,12 +264,17 @@ function nodeBlock(share, machines, now) {
  * was handed over, and how many wait; the form for another. Plain forms, no script.
  */
 function hooksBlock(share, hooks, now) {
+    const log = (h) => {
+        const rows = Array.isArray(h.deliveries) ? h.deliveries.slice(0, 5) : [];
+        if (!rows.length) return '';
+        return `<details class="cn-delivery-log"><summary>Delivery log</summary><ul>${rows.map((d) => `<li><b>${d.status == null ? 'failed' : esc(d.status)}</b> ${esc(d.method)} ${esc(d.path)} · ${esc(ago(d.delivered_at || d.created_at, now))}${d.error ? ` · ${esc(d.error)}` : ''}</li>`).join('')}</ul></details>`;
+    };
     const rows = hooks.length ? `<ul class="cn-hooks">${hooks.map((h, i) => `<li><div class="cn-hook-main"><div class="cn-copy"><code id="cn-hook-${i}">${esc(h.url)}</code><button type="button" class="cn-btn cn-btn-quiet" data-ovk-copy="#cn-hook-${i}" hidden>${kit.icon('copy')} Copy</button></div>
-<small>→ localhost:${esc(share.local_port)}${esc(h.local_path)}${h.label ? ` · ${esc(h.label)}` : ''} · ${esc(h.received)} received, ${esc(h.delivered)} handed over${h.waiting ? `, <b>${esc(h.waiting)} waiting for your computer</b>` : ''}${h.last_received_at ? ` · last ${esc(ago(h.last_received_at, now))}` : ''}${h.last_status ? ` · your app answered ${esc(h.last_status)}` : ''}</small></div>
+<small>→ localhost:${esc(share.local_port)}${esc(h.local_path)}${h.label ? ` · ${esc(h.label)}` : ''} · ${esc(h.received)} received, ${esc(h.delivered)} handed over${h.waiting ? `, <b>${esc(h.waiting)} waiting for your computer</b>` : ''}${h.last_received_at ? ` · last ${esc(ago(h.last_received_at, now))}` : ''}${h.last_status ? ` · your app answered ${esc(h.last_status)}` : ''}</small>${log(h)}</div>
 <form method="post" action="/shares/${esc(share.id)}/hooks/${esc(h.id)}/remove"><button class="cn-btn cn-btn-quiet" type="submit">${kit.icon('close')} Remove</button></form></li>`).join('')}</ul>`
         : '<p class="cn-empty">No webhook addresses yet.</p>';
     return `<section class="cn-hooks-sec" aria-labelledby="cn-hooks-h"><h2 id="cn-hooks-h">Webhooks that wait for your computer</h2>
-<p>Give a service (GitHub, Stripe, anything that sends webhooks) an address here instead of your share's. Each webhook is kept for up to 7 days and handed to your app, at the path you pick, as soon as your computer is connected: a laptop that sleeps misses nothing. Nobody has to sign in to send one, so check the provider's signature in your app.</p>
+<p>Give a service (GitHub, Stripe, anything that sends webhooks) an address here instead of your share's. Each webhook is sealed, kept for up to 72 hours, and handed to your app, at the path you pick, as soon as your computer is connected: a laptop that sleeps misses nothing. A share holds at most 1,000 waiting webhooks; the log below says what your app answered. Nobody has to sign in to send one, so check the provider's signature in your app.</p>
 ${rows}
 <form class="cn-form cn-hook-add" method="post" action="/shares/${esc(share.id)}/hooks">
 <label class="cn-field"><span>Path on your app</span><input name="path" maxlength="500" value="/webhooks" placeholder="/webhooks/github" autocapitalize="none" autocomplete="off" spellcheck="false"></label>
