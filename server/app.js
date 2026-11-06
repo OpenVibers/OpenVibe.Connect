@@ -104,7 +104,7 @@ async function createApp(opts = {}) {
         table: 'service_outbox', eventTypes: ['connect.hook.received'],
         validate: (env) => contracts.validate('events.event-envelope@1', env),
     });
-    const hooks = createHooks(s, { config, outbox, now: s.now });
+    const hooks = createHooks(s, { config, outbox, now: s.now, log });
 
     const ctx = { config, s, keys, sso, principal, shares, tunnels, gate, proxy, apiKeys, oauth, notifier, nodeAuth, machines, hooks, outbox, accountData, accountSend, log };
     ctx.probe = createProbe({ shares, proxy, config, log, now: s.now });
@@ -113,10 +113,16 @@ async function createApp(opts = {}) {
     /** A share's computer is connected: its waiting webhooks go to its app, one at a time, oldest first. → delivered count */
     ctx.deliverWaiting = async (share) => {
         let n = 0;
-        for (const q of await hooks.waiting(share.id)) {
-            const out = await proxy.deliverHook(share, { method: q.method, path: q.path, headers: q.headers, body: q.body, hookId: q.hookId, eventId: q.eventId || q.ref });
+        for (const ref of await hooks.pending(share.id)) {
+            const q = await hooks.request(ref);
+            if (!q) continue;
+            const out = await proxy.deliverHook(share, { method: q.method, path: q.path, headers: q.headers, body: q.body, hookId: q.hookId, eventId: q.eventId || q.ref, receivedAt: q.receivedAt });
             if (out.offline) break;
-            if (out.status && out.status < 500 && await hooks.settle(q.ref, out.status)) n++;
+            if (!out.status || out.status >= 500) {
+                await hooks.fail(q.ref, out.status || null, out.error || `the app answered ${out.status}`);
+                continue;
+            }
+            if (await hooks.settle(q.ref, out.status)) n++;
         }
         if (n) log.log(`[OpenVibe.Connect] ${n} waiting webhook(s) handed to ${share.host}`);
         return n;
@@ -128,8 +134,8 @@ async function createApp(opts = {}) {
         try { due = await shares.expireDue(); } catch (err) { log.warn('[OpenVibe.Connect] expiry sweep failed:', err.message); return []; }
         due.forEach((r) => { tunnels.close(r.id, 4003, 'the share ended'); proxy.forget(r.host); proxy.inspector.forget(r.id); });
         if (due.length) log.log(`[OpenVibe.Connect] ${due.length} share(s) ended on time`);
-        // Webhooks kept past their 7 days go, delivered or not (CON-15).
-        try { const gone = await hooks.sweep(); if (gone) log.log(`[OpenVibe.Connect] ${gone} webhook(s) past 7 days removed`); } catch (err) { log.warn('[OpenVibe.Connect] webhook sweep failed:', err.message); }
+        // Webhooks and delivery-log rows past their 72 hours go, delivered or not (CON-15).
+        try { const gone = await hooks.sweep(); if (gone) log.log(`[OpenVibe.Connect] ${gone} webhook(s) past 72 hours removed`); } catch (err) { log.warn('[OpenVibe.Connect] webhook sweep failed:', err.message); }
         return due;
     };
     if (opts.expirySweep !== false) {

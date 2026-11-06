@@ -61,7 +61,7 @@ async function start() {
         log: ctx.log || console,
     });
     // Hooks (CON-15): the outbox relay publishes webhook pointers, and Connect's own subscription brings them back to
-    // /internal/hook-deliveries, retried for about seven days while a computer is offline. Off in drill mode and
+    // /internal/hook-deliveries, retried for about 72 hours while a computer is offline. Off in drill mode and
     // without the events URL, the delivery secret and the client secret.
     const hookSubs = config.drill ? null : ensureHookSubscription({ config, log: ctx.log || console });
     if (!config.drill && ctx.outbox) ctx.outbox.start();
@@ -70,10 +70,10 @@ async function start() {
     return { server, ctx };
 }
 
-// About seven days of retries (Events allows 20 attempts, each wait at most a day): 5 s, 30 s, 2 min, 10 min, 30 min,
-// 1, 2, 3, 4, 6, 8 hours, four of 12 hours and four of a day.
+// About 72 hours of retries (Events allows 20 attempts): 5 s, 30 s, 2 min, 10 min, 30 min, 1, 2, 3, 4, 6, 8 hours,
+// four of 4 hours, three of 6 hours and two of 8 hours.
 const HOOK_BACKOFF_MS = [5e3, 30e3, 120e3, 600e3, 1800e3, 3600e3, 7200e3, 10800e3, 14400e3, 21600e3, 28800e3,
-    43200e3, 43200e3, 43200e3, 43200e3, 86400e3, 86400e3, 86400e3, 86400e3];
+    14400e3, 14400e3, 14400e3, 14400e3, 21600e3, 21600e3, 21600e3, 28800e3, 28800e3];
 
 /** Connect's subscription to its own connect.hook.received, made once (409 means it is there); tried again every 10 minutes until it is. */
 function ensureHookSubscription({ config, log = console, fetchImpl = globalThis.fetch }) {
