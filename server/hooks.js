@@ -239,8 +239,8 @@ function createHooks(s, { config, outbox = null, now = () => Date.now(), log = c
     /** The owner's delivery log, newest first: what arrived, what the app answered, and when. */
     async function deliveries(shareId, hookId = null, limit = 50) {
         const rows = hookId
-            ? await db.many('SELECT * FROM hook_deliveries WHERE share_id = $1 AND hook_id = $2 ORDER BY created_at DESC, id DESC LIMIT $3', [shareId, hookId, Math.min(Number(limit) || 50, 200)])
-            : await db.many('SELECT * FROM hook_deliveries WHERE share_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2', [shareId, Math.min(Number(limit) || 50, 200)]);
+            ? await db.many('SELECT * FROM hook_deliveries WHERE share_id = $1 AND hook_id = $2 ORDER BY created_at DESC, id DESC LIMIT $3', [shareId, hookId, Math.max(1, Math.min(Math.trunc(Number(limit)) || 50, 200))])
+            : await db.many('SELECT * FROM hook_deliveries WHERE share_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2', [shareId, Math.max(1, Math.min(Math.trunc(Number(limit)) || 50, 200))]);
         return rows.map(delivery);
     }
 
