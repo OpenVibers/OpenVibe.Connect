@@ -20,7 +20,6 @@ const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const contracts = require('openvibe-contracts');
-const CONFIG_CAPABILITY = 'connect.config.manage';
 const cache = require('openvibe-shared/cache-policy');
 
 const configLib = require('./config');
@@ -250,8 +249,8 @@ async function createApp(opts = {}) {
         const configCapability = (req, res, next) => {
             const p = req.principal;
             if (!p || p.kind !== 'app') return contracts.http.sendProblem(res, 401, 'token.required', { detail: 'a Network service token with connect.config.manage is required', ctx: req.ov });
-            const decision = contracts.capabilities.check(p.claims, CONFIG_CAPABILITY);
-            const granted = decision.allowed || contracts.capabilities.grants(p.claims.cap, CONFIG_CAPABILITY);
+            const decision = contracts.capabilities.check(p.claims, 'connect.config.manage');
+            const granted = decision.allowed || contracts.capabilities.grants(p.claims.cap, 'connect.config.manage');
             if (!granted) return contracts.http.sendProblem(res, 403, decision.code || 'capability.denied', { detail: decision.reason || 'connect.config.manage not granted', ctx: req.ov });
             return next();
         };
