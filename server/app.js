@@ -203,7 +203,7 @@ async function createApp(opts = {}) {
                 styleSrc: ["'self'", "'unsafe-inline'", 'https://openvibe.network', 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
                 fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com', 'https://cdnjs.cloudflare.com'],
                 imgSrc: ["'self'", 'data:', 'https://openvibe.network', 'https://openvibe.media'],
-                connectSrc: ["'self'", 'https://openvibe.network', 'https://cloudflareinsights.com', 'https://openvibe.events'],
+                connectSrc: ["'self'", 'https://openvibe.network', 'https://openvibe.chat', 'https://cloudflareinsights.com', 'https://openvibe.events'],
                 frameSrc: ["'self'", 'https://openvibe.network'],
                 frameAncestors: ["'none'"],
                 objectSrc: ["'none'"],
