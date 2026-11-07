@@ -27,6 +27,7 @@ const { openStore } = require('./db');
 const { createKeyStore } = require('./auth/keys');
 const { createSso } = require('./auth/sso');
 const { createPrincipal } = require('./http/principal');
+const settingsLib = require('./settings');
 const { createApi } = require('./http/api');
 const { createNodeApi } = require('./http/node-api');
 const { createNodeAuth } = require('./auth/node-auth');
@@ -67,6 +68,18 @@ async function createApp(opts = {}) {
     const keys = createKeyStore({ config, fetchImpl, log });
     const sso = createSso({ config, keys, fetchImpl, now: s.now, log });
     const principal = createPrincipal({ config, keys });
+    // D11 owner settings (connect.signin_apps): created before the app mounts /internal/config. A failure leaves
+    // Connect serving (the sign-in apps fall back to the environment) and says why in the log.
+    let settings = opts.settings || null;
+    if (!settings) {
+        try {
+            const made = settingsLib.createSettings({ db: s.db, env: opts.env || process.env, log });
+            await made.ready;
+            settings = settingsLib.activate(made);
+        } catch (err) {
+            log.warn('[OpenVibe.Connect] owner settings unavailable, sign-in apps fall back to the environment:', err && err.message);
+        }
+    }
     const shares = createShares(s, { config });
     // "Tell me when it's back" (CON-17): when a share's computer connects, everyone waiting on it gets one notification.
     const notifier = opts.notifier || require('./notify').createNotifier({ config, fetchImpl, log });
@@ -106,7 +119,7 @@ async function createApp(opts = {}) {
     });
     const hooks = createHooks(s, { config, outbox, now: s.now, log });
 
-    const ctx = { config, s, keys, sso, principal, shares, tunnels, gate, proxy, apiKeys, oauth, notifier, nodeAuth, machines, hooks, outbox, accountData, accountSend, log };
+    const ctx = { config, s, keys, sso, principal, settings, shares, tunnels, gate, proxy, apiKeys, oauth, notifier, nodeAuth, machines, hooks, outbox, accountData, accountSend, log };
     ctx.probe = createProbe({ shares, proxy, config, log, now: s.now });
     ctx.probeDelayMs = opts.probeDelayMs != null ? opts.probeDelayMs : 10_000;
 
@@ -222,6 +235,28 @@ async function createApp(opts = {}) {
 
     // ── Webhooks to a share's hooks, and Events' deliveries of them back (CON-15; /internal/ is loopback only) ──
     app.use(createHookRoutes(ctx));
+
+    // ── D11 owner settings (openvibe-shared/config): Network's admin proxy, acting for the owner, reads and
+    // writes connect.signin_apps (the outside OAuth apps). Loopback only, guarded by connect.config.manage; a
+    // secret change needs X-OV-Fresh: 1, and the test route makes one cheap authenticated read per provider.
+    if (settings) {
+        const internalOnly = (req, res, next) => {
+            if (req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.headers['cf-connecting-ip']) {
+                return contracts.http.sendProblem(res, 404, 'connect.not_found', { detail: 'no such route', ctx: req.ov });
+            }
+            return next();
+        };
+        const configCapability = (req, res, next) => {
+            const p = req.principal;
+            if (!p || p.kind !== 'app') return contracts.http.sendProblem(res, 401, 'token.required', { detail: 'a Network service token with connect.config.manage is required', ctx: req.ov });
+            const decision = contracts.capabilities.check(p.claims, 'connect.config.manage');
+            const granted = decision.allowed || contracts.capabilities.grants(p.claims.cap, 'connect.config.manage');
+            if (!granted) return contracts.http.sendProblem(res, 403, decision.code || 'capability.denied', { detail: decision.reason || 'connect.config.manage not granted', ctx: req.ov });
+            return next();
+        };
+        app.use('/internal/config', express.json({ limit: '64kb' }));
+        settings.mount(app, { guard: [internalOnly, principal.middleware, configCapability], log });
+    }
 
     // ── OpenVibe.Events → this service (loopback only; nginx answers 404 for /internal/) ──
     app.use('/internal/events', accountData.consumer({
