@@ -41,7 +41,7 @@ const ENV_ID = 'env-google-client-id';
                 assert.ok(f, `${key} exists`);
                 assert.ok(f.title && f.title.length >= 3, `${key} has a title`);
                 assert.ok(f.description && f.description.length >= 30, `${key} has a 30+ character description`);
-                assert.strictEqual(f['x-owner-input'].group, 'Sign-in apps', `${key} is in Sign-in apps`);
+                assert.strictEqual(f['x-owner-input'].group, 'sign-in-apps', `${key} is in Sign-in apps`);
                 assert.ok(f['x-owner-input'].unlocks && f['x-owner-input'].unlocks.length > 20, `${key} says what it unlocks`);
                 assert.ok(/^https:\/\//.test(f['x-owner-input'].get_it_at), `${key} says where to get it`);
                 assert.ok(f['x-owner-input'].get_it_how, `${key} says how`);

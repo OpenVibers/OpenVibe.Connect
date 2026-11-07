@@ -145,7 +145,7 @@ function field(provider, kind) {
             ? `The OAuth client secret of the ${p.label} app. It is locked when saved and never shown again; enter it again if you rotate it at ${p.label}.`
             : `The OAuth client ID of the ${p.label} app people sign in with. It is public in the sign-in redirect, but only with the secret does it let anyone in.`,
         'x-owner-input': {
-            group: GROUP,
+            group: 'sign-in-apps',
             unlocks: p.unlocks,
             get_it_at: p.get_it_at,
             get_it_how: p.get_it_how,
