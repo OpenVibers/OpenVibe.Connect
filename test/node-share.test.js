@@ -1,6 +1,6 @@
 'use strict';
 /**
- * A share served by one of its owner's computers, as OpenVibe Node (CON-4, ADR-057 decision 4): the owner picks the
+ * A share served by one of its owner's computers, as OpenVibe Link (CON-4, ADR-057 decision 4): the owner picks the
  * computer from their machines on Network; the computer asks for a tunnel token with its node token and says hello with
  * both; a visitor's request reaches it; it sends a fresh node token before the old one runs out, and a tunnel whose token
  * ran out is closed. Every refusal: another person's computer, a token for another audience, a spent or late tunnel

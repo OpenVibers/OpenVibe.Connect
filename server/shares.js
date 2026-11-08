@@ -149,7 +149,7 @@ function createShares(s, { config }) {
             status: row.status,
             policy_version: Number(row.policy_version),
             key_prefix: row.node_id ? null : row.key_prefix,
-            // Served by one of the owner's computers, as OpenVibe Node (CON-4): its Network node principal and name.
+            // Served by one of the owner's computers, as OpenVibe Link (CON-4): its Network node principal and name.
             node: row.node_id ? { id: row.node_id, name: row.node_name || 'A computer' } : null,
             note: row.note || null,
             created_at: iso(row.created_at),
@@ -262,7 +262,7 @@ function createShares(s, { config }) {
         const share = await owned(owner, id);
         if (share.status !== 'active') throw new ShareError(410, 'share.revoked', 'That share is closed.');
         const key = newKey();
-        // A new key means the key serves it: a computer bound as OpenVibe Node is let go (CON-4).
+        // A new key means the key serves it: a computer bound as OpenVibe Link is let go (CON-4).
         await db.exec('UPDATE shares SET key_prefix = $2, key_hash = $3, node_id = NULL, node_name = NULL, updated_at = now() WHERE id = $1', [share.id, key.slice(0, 10), sha256(key)]);
         return { share: await get(share.id), key };
     }

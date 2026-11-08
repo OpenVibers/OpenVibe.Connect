@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * /api/v1/node: a person's computer, as OpenVibe Node (CON-4, ADR-057 decision 4). Every call carries the computer's
+ * /api/v1/node: a person's computer, as OpenVibe Link (CON-4, ADR-057 decision 4). Every call carries the computer's
  * Network node token (Authorization: Bearer, subject node:nod_…, audience openvibe.website); nothing here answers to a
  * person's token or the session.
  *

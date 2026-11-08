@@ -232,7 +232,7 @@ function requestRow(q) {
 const MACHINES_URL = 'https://openvibe.bot/machines';
 
 /**
- * Which computer serves it (CON-4): one of the owner's computers as OpenVibe Node (no key to copy; removing the computer
+ * Which computer serves it (CON-4): one of the owner's computers as OpenVibe Link (no key to copy; removing the computer
  * on OpenVibe stops it), or the one-file client with the connect key. `machines` is null when Network could not be read.
  */
 function nodeBlock(share, machines, now) {
@@ -240,15 +240,15 @@ function nodeBlock(share, machines, now) {
         const run = `openvibe-node share --share ${share.id}`;
         const keep = `sudo openvibe-node share add --share ${share.id}`;
         return `<section class="cn-node" aria-labelledby="cn-node-h"><h2 id="cn-node-h">Your computer serves it</h2>
-<p><b>${esc(share.node.name)}</b> serves this share as OpenVibe Node: no key to copy, and removing the computer on OpenVibe stops it within five minutes.</p>
+<p><b>${esc(share.node.name)}</b> serves this share as OpenVibe Link: no key to copy, and removing the computer on OpenVibe stops it within five minutes.</p>
 <ol class="cn-steps">
 <li><span>On that computer, serve it now:</span><div class="cn-copy"><code id="cn-node-run">${esc(run)}</code><button type="button" class="cn-btn cn-btn-quiet" data-ovk-copy="#cn-node-run" hidden>${kit.icon('copy')} Copy</button></div></li>
-<li><span>Or keep it up with the Node service, across restarts:</span><div class="cn-copy"><code id="cn-node-keep">${esc(keep)}</code><button type="button" class="cn-btn cn-btn-quiet" data-ovk-copy="#cn-node-keep" hidden>${kit.icon('copy')} Copy</button></div></li>
+<li><span>Or keep it up with the Link service, across restarts:</span><div class="cn-copy"><code id="cn-node-keep">${esc(keep)}</code><button type="button" class="cn-btn cn-btn-quiet" data-ovk-copy="#cn-node-keep" hidden>${kit.icon('copy')} Copy</button></div></li>
 </ol>
 <form method="post" action="/shares/${esc(share.id)}/node"><input type="hidden" name="node" value=""><button class="cn-btn cn-btn-quiet" type="submit">${kit.icon('key')} Use a connect key instead</button><span>The computer stops serving it and a new key is shown once.</span></form>
 </section>`;
     }
-    const intro = '<p>Pick one of your computers that runs OpenVibe Node and it serves this share with its own sign-in: no key to copy, and removing the computer on OpenVibe stops it. The connect key stops working while a computer serves it.</p>';
+    const intro = '<p>Pick one of your computers that runs OpenVibe Link and it serves this share with its own sign-in: no key to copy, and removing the computer on OpenVibe stops it. The connect key stops working while a computer serves it.</p>';
     let list;
     if (machines === null) list = '<p class="cn-empty">Your computers could not be read from OpenVibe just now. Reload the page in a moment.</p>';
     else if (!machines.length) list = `<p class="cn-empty">No computers yet. <a href="${esc(MACHINES_URL)}">Add one on openvibe.bot/machines</a>, then come back here.</p>`;
@@ -358,7 +358,7 @@ function sharePage({ share, connected, tunnel = null, visits = [], requests = []
     const state = closed ? 'Closed' : connected ? 'Connected' : 'Not connected';
     const stateText = closed ? `Closed ${ago(share.revoked_at, now)}. The address answers "closed" and stays yours.`
         : connected ? `Connected ${ago(tunnel && tunnel.connectedAt ? new Date(tunnel.connectedAt).toISOString() : share.last_connected_at, now)}${tunnel && tunnel.clientInfo && tunnel.clientInfo.port ? `, serving localhost:${tunnel.clientInfo.port}` : ''}.`
-            : share.last_connected_at ? `Last connected ${ago(share.last_connected_at, now)}. ${share.node ? `Start OpenVibe Node on ${share.node.name}` : 'Run ov-connect on your computer'} to bring it back.` : 'Never connected yet. Run the command below on your computer.';
+            : share.last_connected_at ? `Last connected ${ago(share.last_connected_at, now)}. ${share.node ? `Start OpenVibe Link on ${share.node.name}` : 'Run ov-connect on your computer'} to bring it back.` : 'Never connected yet. Run the command below on your computer.';
     const visitRows = visits.length
         ? `<ul class="cn-visits">${visits.map((v) => `<li><b>${v.username ? `@${esc(v.username)}` : 'someone'}</b><span>${esc(v.requests)} ${v.requests === 1 ? 'request' : 'requests'}${v.denied ? `, ${esc(v.denied)} turned away` : ''} · ${esc(ago(v.last_at, now))}</span></li>`).join('')}</ul>`
         : '<p class="cn-empty">Nobody has opened it in the last 7 days.</p>';
@@ -391,7 +391,7 @@ ${key ? keyBlock(share, key, baseUrl) : ''}
 <div><dt>Port</dt><dd>localhost:${esc(share.local_port)}</dd></div>
 <div><dt>Requests</dt><dd>${esc(Number(share.requests).toLocaleString('en-US'))}</dd></div>
 <div><dt>Data</dt><dd>${esc(fmtBytes(share.bytes_in))} in · ${esc(fmtBytes(share.bytes_out))} out</dd></div>
-${share.node ? `<div><dt>Served by</dt><dd>${esc(share.node.name)} (OpenVibe Node)</dd></div>` : `<div><dt>Key</dt><dd><code>${esc(share.key_prefix)}…</code></dd></div>`}
+${share.node ? `<div><dt>Served by</dt><dd>${esc(share.node.name)} (OpenVibe Link)</dd></div>` : `<div><dt>Key</dt><dd><code>${esc(share.key_prefix)}…</code></dd></div>`}
 <div><dt>Made</dt><dd>${esc(ago(share.created_at, now))}</dd></div>
 ${share.expires_at ? `<div><dt>${closed ? 'Ended' : 'Closes'}</dt><dd><time datetime="${esc(share.expires_at)}">${esc(closed ? ago(share.expires_at, now) : until(share.expires_at, now))}</time></dd></div>` : ''}
 </dl>

@@ -21,7 +21,7 @@
     "The client: hello with a hashed-at-rest key, streams both ways with backpressure, SSE, WebSocket upgrades as a byte pipe, reconnect, takeover, stop on a bad key",
     "The gate: /grant with OpenVibe sign-in, one-time codes, __Host-ovc bound to the share and its policy version",
     "Durable webhooks (CON-15): an address on each share keeps up to 1,000 webhooks for 72 hours, sealed at rest, replays them in order with x-openvibe-received-at and a delivery log the owner can read",
-    "The OpenVibe Node plugin (CON-4): a share served by the owner's paired computer, no key, with `openvibe-node share <port>` and the share in `openvibe-node status`",
+    "The OpenVibe Link plugin (CON-4): a share served by the owner's paired computer, no key, with `openvibe-node share <port>` and the share in `openvibe-node status`",
     "What the app gets: localhost Host, X-Forwarded-Host, X-OpenVibe-User/Subject; Set-Cookie Domain removed; no CDN caching",
     "Pages (front door, your shares, a share's page), the API for a person's token, account export/deletion",
     "Checks on PGlite and PostgreSQL, including a share end to end through the real client"
