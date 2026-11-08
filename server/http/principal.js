@@ -6,8 +6,9 @@
  *   { kind: 'user', subject: 'usr_…', username, role, token, viaSession }
  *       a person: their Network user token as a Bearer, or this site's session cookie (the connect session).
  *   { kind: 'app', requester: 'app:…' | 'agent:…' | 'service:…', project, claims }
- *       a Network app, agent or service token for audience connect.openvibe.website. No Connect route needs one; the shape is
- *       kept so a future capability route can be added in one place.
+ *       a Network app, agent or service token for Connect's service audience (CONNECT_AUDIENCE,
+ *       openvibe.website). No Connect route needs one; the shape is kept so a future capability route can be added in
+ *       one place.
  *   { kind: 'anonymous' }
  *
  * A request that presents a token is judged on that token alone: a bad one is refused, never downgraded to the
@@ -50,6 +51,7 @@ function sameOrigin(req, baseUrl) {
 }
 
 function createPrincipal({ config, keys }) {
+    const host = new URL(config.baseUrl).host;
     async function resolve(req) {
         const header = String(req.headers.authorization || '');
         if (header.startsWith('Bearer ')) {
@@ -86,9 +88,9 @@ function createPrincipal({ config, keys }) {
     function require_(cap) {
         if (!CAPABILITIES.includes(cap)) throw new Error(`requireCapability(${cap}): not one of OpenVibe.Connect's capabilities`);
         return function guard(req, res, next) {
-            if (req.principal.kind === 'anonymous') return http.sendProblem(res, 401, 'token.required', { detail: 'Sign in at connect.openvibe.website, or send a person\'s Network token as a Bearer.', ctx: req.ov });
+            if (req.principal.kind === 'anonymous') return http.sendProblem(res, 401, 'token.required', { detail: `Sign in at ${host}, or send a person's Network token as a Bearer.`, ctx: req.ov });
             if (req.principal.kind === 'user') {
-                if (req.principal.viaSession && req.method !== 'GET' && !sameOrigin(req, config.baseUrl)) return http.sendProblem(res, 403, 'connect.cross_site', { detail: 'A signed-in request that changes something must come from connect.openvibe.website itself.', ctx: req.ov });
+                if (req.principal.viaSession && req.method !== 'GET' && !sameOrigin(req, config.baseUrl)) return http.sendProblem(res, 403, 'connect.cross_site', { detail: `A signed-in request that changes something must come from ${host} itself.`, ctx: req.ov });
                 return next();
             }
             return http.sendProblem(res, 403, 'connect.person_required', { detail: 'This route is for a person, not an app.', ctx: req.ov });
@@ -99,12 +101,12 @@ function createPrincipal({ config, keys }) {
     function requirePerson(req, res, next) {
         if (req.principal.kind === 'user') {
             if (req.principal.viaSession && req.method !== 'GET' && req.method !== 'HEAD' && !sameOrigin(req, config.baseUrl)) {
-                return http.sendProblem(res, 403, 'connect.cross_site', { detail: 'A signed-in request that changes something must come from connect.openvibe.website itself.', ctx: req.ov });
+                return http.sendProblem(res, 403, 'connect.cross_site', { detail: `A signed-in request that changes something must come from ${host} itself.`, ctx: req.ov });
             }
             return next();
         }
         if (req.principal.kind === 'app') return http.sendProblem(res, 403, 'connect.person_required', { detail: 'This route is for a person, not an app or a service.', ctx: req.ov });
-        return http.sendProblem(res, 401, 'token.required', { detail: 'Sign in at connect.openvibe.website, or send a person\'s Network token as a Bearer.', ctx: req.ov });
+        return http.sendProblem(res, 401, 'token.required', { detail: `Sign in at ${host}, or send a person's Network token as a Bearer.`, ctx: req.ov });
     }
 
     return { middleware, resolve, requireCapability: require_, requirePerson };

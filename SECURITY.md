@@ -12,9 +12,11 @@ We reply within 7 days, keep you updated while we fix it, and credit you when th
 
 ## Scope
 
-Every OpenVibe service and site (connect.openvibe.website and every <name>--<user>.openvibe.website, openvibe.live, openvibe.network, openvibe.today, openvibe.tools,
-openvibe.media, openvibe.community, openvibe.games and the other openvibe.* domains) and every repository under
-github.com/OpenVibers. Machine-readable contact details are at `/.well-known/security.txt` on each site.
+Every OpenVibe service and site (connect.openvibe.link and every <name>--<user>.openvibe.link, the old
+connect.openvibe.website and every <name>--<user>.openvibe.website alias, openvibe.live, openvibe.network,
+openvibe.today, openvibe.tools, openvibe.media, openvibe.community, openvibe.games and the other openvibe.* domains)
+and every repository under github.com/OpenVibers. Machine-readable contact details are at `/.well-known/security.txt`
+on each site.
 
 ## What OpenVibe Connect holds
 
@@ -30,7 +32,7 @@ github.com/OpenVibers. Machine-readable contact details are at `/.well-known/sec
 
 - **The gate.** Every visitor signs in with OpenVibe and must be allowed by the share's policy (only the owner, the
   owner and named people, or anyone signed in). There are no public shares: those wait for the abuse check and the
-  Public Suffix List entry for openvibe.website (ADR-057, CON-9 and CON-21). Because anyone can make an OpenVibe
+  Public Suffix List entry for openvibe.link (ADR-057, CON-9 and CON-21). Because anyone can make an OpenVibe
   account, "anyone signed in" is open to OpenVibe staff only until then.
 - **Host-only cookies.** The gate's cookie on a share host is `__Host-ovc` (Secure, HttpOnly, SameSite=Lax, Path=/, no
   Domain), HMAC-signed and bound to that share and its policy version; changing the policy invalidates every cookie.

@@ -4,9 +4,9 @@
  * OpenVibe.Connect: the Express app factory; server/index.js listens, tests build their own instance with a temp
  * database and a mock Network.
  *
- *   <label>--<user>.openvibe.website/*   a share: the gate, then the tunnel (edge/proxy.js), before anything else
+ *   <label>--<user>.openvibe.link/*      a share: the gate, then the tunnel (edge/proxy.js), before anything else
  *   /, /shares/*, /grant                  the pages (http/pages.js)
- *   /api/v1/node/*                        a person's computer as OpenVibe Node (http/node-api.js, CON-4)
+ *   /api/v1/node/*                        a person's computer as OpenVibe Link (http/node-api.js, CON-4)
  *   /api/v1/*                             the API (http/api.js)
  *   /ov-connect.js                        the client, served as it is in public/
  *   /auth/*                               Network SSO with PKCE (auth/sso.js)
@@ -220,7 +220,11 @@ async function createApp(opts = {}) {
     app.use((req, res, next) => {
         const host = String(req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
         const canonical = new URL(config.baseUrl).hostname;
-        if (['connect.openvibe.link', 'connect.openvibe.website'].includes(host) && host !== canonical) {
+        // Only a browser's page load moves to the canonical control host. Machines keep working on the old name:
+        // webhook senders (/h/), Bearer API calls, MCP clients' token and registration calls and agent discovery do
+        // not follow a 302 (and a 302 turns a POST into a GET), so every other method and those paths answer here.
+        const page = (req.method === 'GET' || req.method === 'HEAD') && !/^\/(?:h|api|\.well-known)(?:\/|$)/.test(req.path);
+        if (['connect.openvibe.link', 'connect.openvibe.website'].includes(host) && host !== canonical && page) {
             return res.redirect(302, `${config.baseUrl}${req.originalUrl}`);
         }
         return next();
@@ -239,7 +243,7 @@ async function createApp(opts = {}) {
     // ── Sign-in (OAuth2 + PKCE client of OpenVibe.Network) ──
     app.use('/auth/', rateLimit({ windowMs: 15 * 60_000, limit: 60, standardHeaders: true, legacyHeaders: false }));
     app.use('/auth', sso.routes());
-    { const legal = require('openvibe-shared/legal'); app.get(legal.PATHS, legal.handler({ id: 'connect', service: 'connect', host: 'connect.openvibe.website', name: 'OpenVibe Connect', profile: 'ugc' })); }
+    { const legal = require('openvibe-shared/legal'); app.get(legal.PATHS, legal.handler({ id: 'connect', service: 'connect', host: 'connect.openvibe.link', name: 'OpenVibe Connect', profile: 'ugc' })); }
 
     // ── Webhooks to a share's hooks, and Events' deliveries of them back (CON-15; /internal/ is loopback only) ──
     app.use(createHookRoutes(ctx));

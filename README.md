@@ -1,22 +1,22 @@
 # OpenVibe Connect
 
-Shares move to `.openvibe.link` beside their existing `.openvibe.website` aliases. See
-[the staged rollout and host commands](docs/link-share-rollout.md) before deployment.
+OpenVibe Connect lives at `connect.openvibe.link`; the old `.openvibe.website` addresses still work and redirect. See
+[the staged rollout and host commands](docs/link-share-rollout.md) for how the move was deployed.
 
 **Your computer, on the web, privately.** Share one port on your computer at its own HTTPS address,
 `https://<name>--<you>.openvibe.link`, and only the people you pick can open it, signed in with OpenVibe. No router
 settings, no open ports, no app to install: one file and Node.
 
-Live at **[connect.openvibe.website](https://connect.openvibe.website)**. Connect shares ports through Link; [OpenVibe.Space](https://openvibe.space) builds and hosts sites.
+Live at **[connect.openvibe.link](https://connect.openvibe.link)**. Connect shares ports through Link; [OpenVibe.Space](https://openvibe.space) builds and hosts sites.
 
 ## Use it
 
-1. Sign in at connect.openvibe.website and make a share: a name (`agents`), the port on your computer (`8790`), and
+1. Sign in at connect.openvibe.link and make a share: a name (`agents`), the port on your computer (`8790`), and
    who can open it.
 2. On your computer (Node 22 or newer):
 
    ```bash
-   curl -fsSLO https://connect.openvibe.website/ov-connect.js
+   curl -fsSLO https://connect.openvibe.link/ov-connect.js
    node ov-connect.js --key ovc_… --port 8790
    ```
 
@@ -36,14 +36,14 @@ sudo openvibe-node share add --share shr_…       # or keep it up with the Link
 ```
 
 There is no key to copy. The computer proves itself twice at every connection: with its Network node token (subject
-`node:nod_…`, audience `openvibe.website`, 5 minutes) and with a tunnel token Connect gives it for that one share (60
+`node:nod_…`, audience `openvibe.link`, 5 minutes) and with a tunnel token Connect gives it for that one share (60
 seconds, one use). It sends a fresh node token before the old one runs out, so a computer removed on OpenVibe stops
 serving within about five minutes. While a computer serves a share, the share's key does not work; "Use a connect key
 instead" lets the computer go and shows a new key once (ADR-057 decision 4, CON-4).
 
 ### Webhooks that wait for your computer
 
-On a share's page, "Make a webhook address" gives you `https://connect.openvibe.website/h/hk_…` and a path on your app
+On a share's page, "Make a webhook address" gives you `https://connect.openvibe.link/h/hk_…` and a path on your app
 (`/webhooks/github`). Give that address to GitHub, Stripe or anything else that sends webhooks. Each webhook is sealed,
 kept for up to 72 hours and handed to your app, at that path, as soon as your computer is connected, so a laptop that
 sleeps misses nothing (CON-15, ADR-057 decision 7):
@@ -84,10 +84,10 @@ sleeps misses nothing (CON-15, ADR-057 decision 7):
 | `named` | you and the OpenVibe usernames you list |
 | `signin` | anyone signed in to OpenVibe (OpenVibe staff only until the abuse check is in, as with Space's public publishing) |
 
-Public shares (no sign-in) come once the abuse check and openvibe.website's entry in the Public Suffix List are in
+Public shares (no sign-in) come once the abuse check and openvibe.link's entry in the Public Suffix List are in
 (ADR-057, CON-9 and CON-21). Changing who can open a share signs everyone out of it.
 
-Anyone can report a share at [/report](https://connect.openvibe.website/report) (CON-9 v0): its address, what is
+Anyone can report a share at [/report](https://connect.openvibe.link/report) (CON-9 v0): its address, what is
 wrong and what they saw. OpenVibe staff read the open reports at `/admin/reports` and can close a share; its computer
 is disconnected and its address then says it was closed after a report. A report keeps the reporter's account only
 when they were signed in, never an address.
@@ -107,7 +107,7 @@ computer (Ollama, llama.cpp's server, anything OpenAI-compatible) or an API of y
 another app:
 
 ```
-curl -H "Authorization: Bearer ovsk_…" https://llm--you.openvibe.website/v1/models
+curl -H "Authorization: Bearer ovsk_…" https://llm--you.openvibe.link/v1/models
 ```
 
 - **A key opens the share's API, never its pages.** An HTML answer to a key is refused at the edge (406), so a key
@@ -133,7 +133,7 @@ curl -H "Authorization: Bearer ovsk_…" https://llm--you.openvibe.website/v1/mo
 ### Claude and other MCP clients (CON-16, MCP OAuth 2.1)
 
 If what you share is an MCP server, its address works as a connector URL in Claude or any MCP client
-(`https://tools--you.openvibe.website/mcp`). The client signs the person in with OpenVibe, with no key to paste:
+(`https://tools--you.openvibe.link/mcp`). The client signs the person in with OpenVibe, with no key to paste:
 
 1. The share answers a program that has no credentials `401` with
    `WWW-Authenticate: Bearer resource_metadata="https://<share>/.well-known/oauth-protected-resource"`. That document
@@ -154,7 +154,7 @@ kept. Cases: `test/mcp-oauth.test.js`.
 
 ## API
 
-With a person's OpenVibe token as a Bearer (or the session on connect.openvibe.website):
+With a person's OpenVibe token as a Bearer (or the session on connect.openvibe.link):
 
 | Call | What |
 |---|---|
@@ -169,7 +169,7 @@ With a person's OpenVibe token as a Bearer (or the session on connect.openvibe.w
 | `GET /api/v1/machines` | your computers that can serve a share (OpenVibe Link, from Network) |
 | `PUT /api/v1/shares/:id/node` `{ node: 'nod_…' \| null }` | one of your computers serves it (the key stops working) → `{ share }`; `null` lets it go → `{ share, key }` |
 
-A computer, with its Network node token (audience `openvibe.website`) as a Bearer:
+A computer, with its Network node token (audience `openvibe.link`) as a Bearer:
 
 | Call | What |
 |---|---|
@@ -220,5 +220,5 @@ AGPL-3.0-only. The client (`public/ov-connect.js`) is part of this repository un
 <!-- versions:start -->
 - openvibe-contracts: v0.338.0
 - openvibe-sdk: v0.94.0
-- openvibe-shared: v4.154.0
+- openvibe-shared: v4.155.0
 <!-- versions:end -->

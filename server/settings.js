@@ -18,7 +18,7 @@ const SERVICE = 'connect';
 const NAMESPACE = 'connect.signin_apps';
 const BASE_PATH = '/internal/config';
 const GROUP = 'Sign-in apps';
-const REDIRECT = 'https://connect.openvibe.website/auth/callback';
+const REDIRECT = 'https://connect.openvibe.link/auth/callback';
 
 /**
  * One entry per outside service. `env` names the fallback variables; `test` is the one cheap

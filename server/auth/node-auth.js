@@ -1,10 +1,11 @@
 'use strict';
 
 /**
- * A person's computer, as OpenVibe Node (CON-4, ADR-057 decision 4). Two credentials, both checked:
+ * A person's computer, as OpenVibe Link (CON-4, ADR-057 decision 4). Two credentials, both checked:
  *
  *   1. its Network node token: an RS256 service token whose subject is node:<nod_…> (actor_type node), for audience
- *      openvibe.website, 300 s. Network issues it to any active machine a person owns (Network #538);
+ *      openvibe.link (old binaries: openvibe.website), 300 s. Network issues it to any active machine a person owns
+ *      (Network #538);
  *   2. a tunnel token Connect mints for one share and that computer: `ovt_` + 32 random bytes, 60 s, one use. It is
  *      kept in memory as a SHA-256 hash only, never logged, stored or put in an event.
  *

@@ -10,7 +10,7 @@
  *   POST /oauth/token                              code + PKCE verifier, or a refresh token → tokens
  *
  * The metadata, registration and token answers carry CORS for any origin (MCP clients run in browsers too); the
- * consent is a page on connect.openvibe.website and cannot be posted from elsewhere.
+ * consent is a page on connect.openvibe.link and cannot be posted from elsewhere.
  */
 const express = require('express');
 const { asyncRouter } = require('./router');
@@ -23,6 +23,7 @@ function createOAuthRoutes(ctx) {
     const { config, oauth, shares, proxy } = ctx;
     const r = asyncRouter();
     const issuer = config.baseUrl;
+    const host = new URL(issuer).host;
     const page = (req, res, o, status = 200) => send(res, status, { viewer: req.viewer, config, path: req.originalUrl, ...o });
     const signedIn = (req) => Boolean(req.viewer && req.viewer.kind === 'user' && req.viewer.subject);
     const cors = (res) => { res.set('Access-Control-Allow-Origin', '*'); res.set('Access-Control-Allow-Headers', 'content-type, authorization, mcp-protocol-version'); res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'); };
@@ -112,7 +113,7 @@ function createOAuthRoutes(ctx) {
         res.set('Cache-Control', 'no-store');
         res.set('Referrer-Policy', 'no-referrer');
         if (!signedIn(req)) return res.redirect(303, '/auth/login?next=%2F');
-        if (!sameOrigin(req, config.baseUrl)) return page(req, res, { title: 'Not from this site', body: views.message({ title: 'That came from somewhere else', text: 'Answer on connect.openvibe.website itself.', link: { href: '/', label: 'OpenVibe Connect' } }) }, 403);
+        if (!sameOrigin(req, config.baseUrl)) return page(req, res, { title: 'Not from this site', body: views.message({ title: 'That came from somewhere else', text: `Answer on ${host} itself.`, link: { href: '/', label: 'OpenVibe Connect' } }) }, 403);
         const q = pick(req.body || {});
         const ok = await checked(req, res, q);
         if (!ok) return undefined;

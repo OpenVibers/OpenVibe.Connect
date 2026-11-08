@@ -11,7 +11,7 @@
  *
  *   --key <ovc_…>      your share's connect key (or OV_CONNECT_KEY)
  *   --port <n>         the local port to share (or the first bare number)
- *   --server <wss://>  default wss://connect.openvibe.website/tunnel
+ *   --server <wss://>  default wss://connect.openvibe.link/tunnel
  *   --quiet            no line per request
  *
  * Source: https://github.com/OpenVibers/OpenVibe.Connect (AGPL-3.0). Protocol: ovconnect-ws/1 (server/edge/frames.js).
@@ -55,7 +55,7 @@ function main() {
     const opts = parseArgs(process.argv.slice(2));
     if (opts.version) { console.log(`ov-connect ${VERSION}`); return; }
     if (opts.help || !opts.key || !opts.port) {
-        console.log('ov-connect: share a port on this computer at your OpenVibe Connect address.\n\n  node ov-connect.js --key ovc_… --port 8080\n\nMake a share and its key at https://connect.openvibe.website');
+        console.log('ov-connect: share a port on this computer at your OpenVibe Connect address.\n\n  node ov-connect.js --key ovc_… --port 8080\n\nMake a share and its key at https://connect.openvibe.link');
         process.exitCode = opts.help ? 0 : 2;
         return;
     }
@@ -71,7 +71,7 @@ function main() {
 /**
  * The client itself (exported for tests): createClient({ key, port, server, quiet, log, localHost }) → { start, stop, onReady }
  */
-const DEFAULT_SERVER = 'wss://connect.openvibe.website/tunnel';
+const DEFAULT_SERVER = 'wss://connect.openvibe.link/tunnel';
 
 function createClient(opts) {
     opts = { ...opts, server: opts.server || DEFAULT_SERVER };

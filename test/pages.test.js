@@ -71,7 +71,7 @@ const { check, done } = require('./helpers/check');
         assert.ok(page.text.includes(`name="offline_site" type="url" maxlength="300" value="${site}"`), 'the saved site is shown');
         const bad = await t.get(`/shares/${id}/policy`, { as: kim, form: { mode: 'named', named: '@lee, sam', offline_site: 'https://evil.example/' } });
         assert.strictEqual(bad.status, 422);
-        assert.match(bad.text, /one of the sites on this domain/);
+        assert.match(bad.text, /one of your OpenVibe\.Space sites/);
         await t.get(`/shares/${id}/policy`, { as: kim, form: { mode: 'named', named: '@lee, sam', offline_site: '' } });
         assert.strictEqual((await t.get('/api/v1/shares', { as: kim })).json().shares[0].offline_site, null, 'cleared');
     });
@@ -127,7 +127,7 @@ const { check, done } = require('./helpers/check');
         const agent = await t.get('/.well-known/agent.json');
         assert.strictEqual(agent.status, 200);
         const m = agent.json();
-        assert.deepStrictEqual([m.network, m.id, m.home], ['OpenVibe', 'connect', 'https://connect.openvibe.website']);
+        assert.deepStrictEqual([m.network, m.id, m.home], ['OpenVibe', 'connect', 'https://connect.openvibe.link']);
         // SEO-33: llms.txt, then the README (Connect's full documentation).
         const full = await t.get('/llms-full.txt');
         assert.strictEqual(full.status, 200);

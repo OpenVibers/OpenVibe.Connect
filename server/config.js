@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * OpenVibe.Connect configuration (connect.openvibe.website). Every value comes from the environment (production:
+ * OpenVibe.Connect configuration (connect.openvibe.link). Every value comes from the environment (production:
  * /etc/openvibe/connect.env, see .env.example). Only environment variable NAMES appear in code and docs; secrets are
  * never logged.
  *
@@ -16,7 +16,7 @@ function load(env = process.env) {
     const nodeEnv = env.NODE_ENV || 'development';
     const isProduction = nodeEnv === 'production';
     const port = int(env.PORT, 5240);
-    const baseUrl = trim(env.BASE_URL || (isProduction ? 'https://connect.openvibe.website' : `http://localhost:${port}`));
+    const baseUrl = trim(env.BASE_URL || (isProduction ? 'https://connect.openvibe.link' : `http://localhost:${port}`));
     const networkUrl = trim(env.OV_NETWORK_URL || 'https://openvibe.network');
 
     return {
@@ -41,7 +41,7 @@ function load(env = process.env) {
         networkIssuer: trim(env.OV_NETWORK_ISSUER || networkUrl),
         // The registered service/admin audience stays Website; node audiences are independent.
         audience: env.CONNECT_AUDIENCE || 'openvibe.website',
-        // Old Link binaries still request the Website audience during the transition.
+        // Old binaries still request the Website audience during the transition.
         nodeAudiences: [...new Set([env.CONNECT_AUDIENCE || 'openvibe.link', 'openvibe.link', 'openvibe.website'])],
         partySharedSecret: env.CONNECT_PARTY_SHARED_SECRET || '',
         oauth: {

@@ -2,7 +2,7 @@
 
 /**
  * Hooks that wait for your computer (CON-15, ADR-057 decision 7). A hook is an address a provider sends webhooks to,
- * https://connect.openvibe.website/h/<hk_…>, bound to one share and a path on the computer's app. A webhook is kept
+ * https://connect.openvibe.link/h/<hk_…>, bound to one share and a path on the computer's app. A webhook is kept
  * (72 hours) and a pointer to it is published as connect.hook.received through the outbox, in one transaction. Events
  * delivers it to Connect's own subscription (retried for up to 72 hours), and Connect hands it to the share's
  * computer when it is connected. The computer may be asleep for days and still get every webhook, in order of arrival,
