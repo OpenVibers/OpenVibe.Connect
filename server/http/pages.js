@@ -60,7 +60,7 @@ function createPageRoutes(ctx) {
             title: null,
             index: true,
             description: 'OpenVibe Connect: share one port on your computer at its own HTTPS address, behind OpenVibe sign-in. Only the people you pick can open it. One file, Node 22, no router settings.',
-            body: views.home({ viewer: req.viewer, shares: list, connectedIds: connectedIds(list), stats: await homeStats(), baseUrl: config.baseUrl }),
+            body: views.home({ viewer: req.viewer, shares: list, connectedIds: connectedIds(list), stats: await homeStats(), domain: config.shares.domain, baseUrl: config.baseUrl }),
         });
     });
 
@@ -74,7 +74,7 @@ function createPageRoutes(ctx) {
             if (!(err instanceof ShareError)) throw err;
             const list = await shares.list(req.viewer.subject);
             const form = { values: input, error: err.message, username: req.viewer.username };
-            return page(req, res, { title: 'Make a share', body: views.home({ viewer: req.viewer, shares: list, connectedIds: connectedIds(list), stats: await homeStats(), baseUrl: config.baseUrl, form }) }, err.status || 422);
+            return page(req, res, { title: 'Make a share', body: views.home({ viewer: req.viewer, shares: list, connectedIds: connectedIds(list), stats: await homeStats(), domain: config.shares.domain, baseUrl: config.baseUrl, form }) }, err.status || 422);
         }
     });
 
@@ -238,7 +238,13 @@ function createPageRoutes(ctx) {
         res.set('Cache-Control', 'no-store');
         const id = typeof req.query.share === 'string' ? req.query.share.slice(0, 64) : '';
         const next = gate.safeNext(typeof req.query.next === 'string' ? req.query.next : '/');
-        const share = id ? await shares.get(id) : null;
+        let share = id ? await shares.get(id) : null;
+        if (share && req.query.host != null) {
+            const host = typeof req.query.host === 'string' ? req.query.host.toLowerCase() : '';
+            const alias = await shares.byHost(host);
+            if (!alias || alias.id !== share.id || !/^[a-z0-9.-]+$/.test(host)) return res.sendStatus(400);
+            if (!config.shares.redirectLegacy) share = { ...share, host, url: `${config.shares.scheme}://${host}` };
+        }
         if (!share || share.status !== 'active') {
             return page(req, res, { title: 'No such share', body: views.message({ title: 'No such share', text: share ? `${share.host} is closed.` : 'That share does not exist.', link: { href: '/', label: 'OpenVibe Connect' } }) }, share ? 410 : 404);
         }
@@ -247,7 +253,7 @@ function createPageRoutes(ctx) {
             proxy.denied(share, req.viewer);
             return page(req, res, { title: 'Not for you', body: views.grantDenied({ share, viewer: req.viewer }) }, 403);
         }
-        const code = gate.mintCode({ shareId: share.id, subject: req.viewer.subject, username: req.viewer.username });
+        const code = gate.mintCode({ shareId: share.id, subject: req.viewer.subject, username: req.viewer.username, host: share.host });
         res.set('Referrer-Policy', 'no-referrer');
         return res.redirect(303, `${share.url}/__ovc/callback?code=${encodeURIComponent(code)}&next=${encodeURIComponent(next)}`);
     });

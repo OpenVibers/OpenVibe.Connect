@@ -30,7 +30,7 @@ async function boot(opts = {}) {
         OV_OAUTH_CLIENT_ID: 'connect', OV_OAUTH_CLIENT_SECRET: 'connect-secret', COOKIE_SECURE: 'false',
         CONNECT_DRILL: '1',
         CONNECT_EVENTS_URL: network.url,
-        CONNECT_SHARE_SCHEME: 'https',
+        CONNECT_SHARE_SCHEME: 'https', CONNECT_SHARE_DOMAIN: 'openvibe.website',
         CONNECT_SESSION_SECRET: 'test-session-secret-0123456789abcdef0123',
         CONNECT_PING_MS: '60000',
         ...(opts.env || {}),

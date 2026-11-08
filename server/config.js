@@ -39,7 +39,10 @@ function load(env = process.env) {
         networkUrl,
         networkInternalUrl: trim(env.OV_NETWORK_INTERNAL_URL || 'http://127.0.0.1:4000'),
         networkIssuer: trim(env.OV_NETWORK_ISSUER || networkUrl),
+        // The registered service/admin audience stays Website; node audiences are independent.
         audience: env.CONNECT_AUDIENCE || 'openvibe.website',
+        // Old Link binaries still request the Website audience during the transition.
+        nodeAudiences: [...new Set([env.CONNECT_AUDIENCE || 'openvibe.link', 'openvibe.link', 'openvibe.website'])],
         oauth: {
             clientId: env.OV_OAUTH_CLIENT_ID || 'connect',
             clientSecret: env.OV_OAUTH_CLIENT_SECRET || '',
@@ -59,7 +62,10 @@ function load(env = process.env) {
         // The shares. A share answers at https://<label>--<user>.<shareDomain>. The session secret signs the
         // visitor's host-only cookie on a share host and is required in production (32+ characters).
         shares: {
-            domain: String(env.CONNECT_SHARE_DOMAIN || 'openvibe.website').toLowerCase(),
+            domain: String(env.CONNECT_SHARE_DOMAIN || 'openvibe.link').toLowerCase(),
+            domains: [...new Set([env.CONNECT_SHARE_DOMAIN || 'openvibe.link', ...(env.CONNECT_SHARE_DOMAINS || 'openvibe.link,openvibe.website').split(',')].map((s) => s.trim().toLowerCase()).filter(Boolean))],
+            // Enable only after DNS, wildcard TLS and the new vhost have been proved.
+            redirectLegacy: bool(env.CONNECT_REDIRECT_LEGACY),
             scheme: env.CONNECT_SHARE_SCHEME || (isProduction ? 'https' : 'http'),
             sessionSecret: env.CONNECT_SESSION_SECRET || (isProduction ? '' : 'development-only-session-secret-0123456789'),
             sessionHours: Math.max(1, Math.min(72, int(env.CONNECT_SESSION_HOURS, 12))),

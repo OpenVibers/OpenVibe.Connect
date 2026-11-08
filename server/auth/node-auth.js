@@ -28,7 +28,8 @@ function createNodeAuth({ config, keys, now = () => Date.now() }) {
         if (typeof token !== 'string' || token.split('.').length !== 3) return { ok: false, status: 401, code: 'token.malformed', reason: 'not a node token' };
         const publicKey = await keys.pemForToken(token);
         if (!publicKey) return { ok: false, status: 503, code: 'identity.unavailable', reason: 'the Network signing key is not loaded yet' };
-        const r = serviceAuth.verifyServiceToken(token, { publicKey, issuer: config.networkIssuer, audience: config.audience, now: now() });
+        const results = (config.nodeAudiences || [config.audience]).map((audience) => serviceAuth.verifyServiceToken(token, { publicKey, issuer: config.networkIssuer, audience, now: now() }));
+        const r = results.find((result) => result.ok) || results[0];
         if (!r.ok) return { ok: false, status: 401, code: r.code || 'token.invalid', reason: r.reason || 'the token does not verify' };
         const m = NODE_SUB.exec(String(r.claims.sub || ''));
         if (!m || r.claims.actor_type !== 'node') return { ok: false, status: 401, code: 'token.not_node', reason: 'this is not a computer\'s node token' };

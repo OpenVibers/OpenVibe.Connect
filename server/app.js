@@ -217,6 +217,14 @@ async function createApp(opts = {}) {
         crossOriginResourcePolicy: { policy: 'same-site' },
         referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     }));
+    app.use((req, res, next) => {
+        const host = String(req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
+        const canonical = new URL(config.baseUrl).hostname;
+        if (['connect.openvibe.link', 'connect.openvibe.website'].includes(host) && host !== canonical) {
+            return res.redirect(302, `${config.baseUrl}${req.originalUrl}`);
+        }
+        return next();
+    });
     app.use(cookieParser());
 
     // ── Machine endpoints ───────────────────────────────────

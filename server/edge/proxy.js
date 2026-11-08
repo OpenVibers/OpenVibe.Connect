@@ -42,7 +42,7 @@ const PRM = '/.well-known/oauth-protected-resource';
 function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = null, log = console, now = () => Date.now() }) {
     // The last requests through each share, for its owner's page (CON-8 v0; memory only).
     const inspector = require('./inspector').createInspector({ now });
-    const domain = config.shares.domain;
+    const domain = config.shares.domains || [config.shares.domain];
     const cache = new Map();          // host → { share, at }
     const windows = new Map();        // share id → { start, count }
     const ownerBytes = new Map();     // owner subject → { day, bytes }
@@ -52,7 +52,7 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = nu
     const today = () => new Date(now()).toISOString().slice(0, 10);
     const shareUrl = (share) => share.url || `https://${share.host}`;
     const resourceMetadata = (share) => `${shareUrl(share)}${PRM}`;
-    const grantUrl = (share, next) => `${config.baseUrl}/grant?share=${encodeURIComponent(share.id)}&next=${encodeURIComponent(gate.safeNext(next))}`;
+    const grantUrl = (share, next) => `${config.baseUrl}/grant?share=${encodeURIComponent(share.id)}&next=${encodeURIComponent(gate.safeNext(next))}${share.host !== share.canonicalHost && share.canonicalHost ? `&host=${encodeURIComponent(share.host)}` : ''}`;
 
     async function lookup(host) {
         const hit = cache.get(host);
@@ -63,7 +63,10 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = nu
         return share;
     }
     /** Forget what is cached for a share (a policy change, a new key, a revoke). */
-    function forget(host) { cache.delete(String(host || '').toLowerCase()); }
+    function forget(host) {
+        const p = parseHost(host, domain);
+        if (p) for (const d of domain) cache.delete(`${p.label}--${p.handle}.${d}`);
+    }
 
     function counter(shareId) {
         if (!counters[shareId]) counters[shareId] = { requests: 0, bytesIn: 0, bytesOut: 0, visits: {} };
@@ -149,6 +152,9 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = nu
         out['cache-control'] = privateCache(cacheControl);
         out['cloudflare-cdn-cache-control'] = 'no-store';
         out['x-robots-tag'] = 'noindex, nofollow';
+        // A local app is not a first-party card. Keep its own CSP and add an independent framing policy.
+        out['content-security-policy'] = [].concat(out['content-security-policy'] || [], "frame-ancestors 'none'");
+        out['x-frame-options'] = 'DENY';
         return out;
     }
 
@@ -262,7 +268,14 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = nu
         if (expired) { sendProblem(req, res, 410, 'expired', 'This share has ended', `${share.host} was shared until ${new Date(share.expires_at).toUTCString().replace(' GMT', ' UTC')}, and that time is up.`, { link: { href: config.baseUrl, text: 'What is OpenVibe Connect?' } }); return null; }
         if (share.status !== 'active' && share.closed_reason === 'report') { sendProblem(req, res, 410, 'closed', 'This share was closed', `OpenVibe closed ${share.host} after a report.`, { link: { href: config.baseUrl, text: 'What is OpenVibe Connect?' } }); return null; }
         if (share.status !== 'active') { sendProblem(req, res, 410, 'closed', 'This share is closed', `${share.owner_username} closed ${share.host}.`, { link: { href: config.baseUrl, text: 'What is OpenVibe Connect?' } }); return null; }
-        return share;
+        const canonicalHost = share.host;
+        if (config.shares.redirectLegacy && parsed.host !== canonicalHost) {
+            // Build from a validated host; preserve the original path and query, never its authority.
+            res.writeHead(302, { location: `${config.shares.scheme}://${canonicalHost}${String(req.url || '/')}`, 'cache-control': 'no-store', 'cloudflare-cdn-cache-control': 'no-store', 'referrer-policy': 'no-referrer' });
+            res.end();
+            return null;
+        }
+        return { ...share, canonicalHost, host: parsed.host, url: `${config.shares.scheme}://${parsed.host}` };
     }
 
     async function handle(req, res) {
@@ -273,9 +286,9 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = nu
 
         if (path === '/__ovc/callback') {
             const q = new URL(url, 'http://x').searchParams;
-            const v = gate.redeemCode(q.get('code'), share.id);
+            const v = gate.redeemCode(q.get('code'), share.id, share.host);
             if (!v) return sendPage(res, 400, 'That link ran out', 'Sign-in links work once, for a minute.', { link: { href: grantUrl(share, q.get('next') || '/'), text: 'Try again' } });
-            const cookie = gate.sign({ shareId: share.id, subject: v.subject, username: v.username, policyVersion: share.policy_version });
+            const cookie = gate.sign({ shareId: share.id, subject: v.subject, username: v.username, policyVersion: share.policy_version, host: share.host });
             res.writeHead(303, { location: gate.safeNext(q.get('next')), 'set-cookie': gate.cookieHeader(cookie), 'cache-control': 'no-store', 'cloudflare-cdn-cache-control': 'no-store', 'referrer-policy': 'no-referrer' });
             return res.end();
         }

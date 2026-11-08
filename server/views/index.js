@@ -34,11 +34,11 @@ function ago(iso, now = Date.now()) {
 }
 
 /** The hero's picture: a port on a laptop, a line through OpenVibe, an address on a phone with a lock. */
-function motif() {
+function motif(domain) {
     return `<div class="cn-motif" aria-hidden="true">
 <div class="cn-m-box cn-m-pc"><span class="cn-m-k">your computer</span><b>localhost:8080</b><span class="cn-m-dot"></span></div>
 <div class="cn-m-line"><i></i><span>one outgoing connection</span></div>
-<div class="cn-m-box cn-m-phone"><span class="cn-m-k">anywhere</span><b>agents--you.openvibe.website</b><span class="cn-m-lock">${kit.icon('lock')} signed in as you</span></div>
+<div class="cn-m-box cn-m-phone"><span class="cn-m-k">anywhere</span><b>agents--you.${esc(domain)}</b><span class="cn-m-lock">${kit.icon('lock')} signed in as you</span></div>
 </div>`;
 }
 
@@ -46,8 +46,8 @@ function terminal(lines) {
     return `<div class="cn-term" role="img" aria-label="A terminal running ov-connect"><div class="cn-term-bar"><i></i><i></i><i></i></div><pre>${lines.map((l) => (l.startsWith('$ ') ? `<span class="cn-term-cmd">${esc(l)}</span>` : `<span class="cn-term-out">${esc(l)}</span>`)).join('\n')}</pre></div>`;
 }
 
-function phone() {
-    return `<div class="cn-phone" role="img" aria-label="A phone opening a share"><div class="cn-phone-url">${kit.icon('lock')}<span>agents--you.openvibe.website</span></div>
+function phone(domain) {
+    return `<div class="cn-phone" role="img" aria-label="A phone opening a share"><div class="cn-phone-url">${kit.icon('lock')}<span>agents--you.${esc(domain)}</span></div>
 <div class="cn-phone-body"><b>Your agent portal</b><span>Runs on your desk. Open here, over 5G.</span><span class="cn-phone-pill">Signed in as you</span></div></div>`;
 }
 
@@ -94,13 +94,13 @@ function closesField(current, { keep = null } = {}) {
     return `<label class="cn-field cn-field-closes"><span>Closes by itself</span><select name="expires_in">${opts.map(([v, t]) => `<option value="${esc(v)}"${String(current) === v ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select><small>The address answers "ended" after that, and the computer is disconnected.</small></label>`;
 }
 
-function createForm({ values = {}, error = null, username = '', staff = false } = {}) {
+function createForm({ values = {}, error = null, username = '', staff = false, domain = 'openvibe.link' } = {}) {
     const handle = String(username || 'you').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'you';
     return `<form class="cn-form" method="post" action="/shares" id="new">
 <h2>Make a share</h2>
 ${error ? `<p class="cn-error" role="alert">${esc(error)}</p>` : ''}
 <div class="cn-fields">
-<label class="cn-field"><span>Name</span><span class="cn-addr"><input name="label" required maxlength="40" pattern="[a-z0-9]([a-z0-9]|-(?=[a-z0-9])){0,39}" value="${esc(values.label || '')}" placeholder="agents" autocapitalize="none" autocomplete="off" spellcheck="false"><span class="cn-addr-tail">--${esc(handle)}.openvibe.website</span></span><small>a–z, 0–9 and hyphens</small></label>
+<label class="cn-field"><span>Name</span><span class="cn-addr"><input name="label" required maxlength="40" pattern="[a-z0-9]([a-z0-9]|-(?=[a-z0-9])){0,39}" value="${esc(values.label || '')}" placeholder="agents" autocapitalize="none" autocomplete="off" spellcheck="false"><span class="cn-addr-tail">--${esc(handle)}.${esc(domain)}</span></span><small>a–z, 0–9 and hyphens</small></label>
 <label class="cn-field cn-field-port"><span>Port on your computer</span><input name="port" required inputmode="numeric" pattern="[0-9]{1,5}" maxlength="5" value="${esc(values.port || '')}" placeholder="8080"></label>
 </div>
 ${closesField(values.expires_in == null ? '' : values.expires_in)}
@@ -113,7 +113,7 @@ ${modeChoices(values.mode || 'owner', staff)}
 </form>`;
 }
 
-function yourShares({ viewer, shares, connectedIds, form }) {
+function yourShares({ viewer, shares, connectedIds, form, domain }) {
     if (!viewer || viewer.kind !== 'user') return '';
     const open = shares.filter((s) => s.status === 'active');
     const closed = shares.filter((s) => s.status !== 'active');
@@ -121,18 +121,18 @@ function yourShares({ viewer, shares, connectedIds, form }) {
         ? `<ul class="cn-shares">${open.map((s) => shareRow(s, { connected: connectedIds.has(s.id) })).join('')}</ul>`
         : '<p class="cn-empty">No shares yet. Make one below: a name, a port, who can open it.</p>';
     const closedList = closed.length ? `<details class="cn-closed"><summary>Closed shares (${closed.length})</summary><ul class="cn-shares">${closed.map((s) => shareRow(s, { connected: false })).join('')}</ul></details>` : '';
-    return `<section class="cn-yours" aria-labelledby="cn-yours-h"><h2 id="cn-yours-h">Your shares</h2>${list}${closedList}${createForm({ username: viewer.username, ...(form || {}), staff: viewer.role === 'admin' })}</section>`;
+    return `<section class="cn-yours" aria-labelledby="cn-yours-h"><h2 id="cn-yours-h">Your shares</h2>${list}${closedList}${createForm({ domain, username: viewer.username, ...(form || {}), staff: viewer.role === 'admin' })}</section>`;
 }
 
-function home({ viewer, shares = [], connectedIds = new Set(), stats = {}, baseUrl, form = null }) {
+function home({ viewer, shares = [], connectedIds = new Set(), stats = {}, baseUrl, form = null, domain = 'openvibe.link' }) {
     const signedIn = viewer && viewer.kind === 'user';
     const body = sc.room({
         room: 'website',
         hero: {
             title: 'Your computer, on the web, privately',
-            lede: 'Share one port on your computer at its own address, like agents--you.openvibe.website. Only the people you pick can open it, signed in with OpenVibe. No router settings, no open ports, no app to install: one file and Node.',
+            lede: `Share one port on your computer at its own address, like agents--you.${esc(domain)}. Only the people you pick can open it, signed in with OpenVibe. No router settings, no open ports, no app to install: one file and Node.`,
             start: signedIn ? { href: '#new', label: 'Make a share' } : { href: '/auth/login?next=%2F%23new', label: 'Sign in to make a share' },
-            motif: motif(),
+            motif: motif(domain),
         },
         proof: [
             { value: stats.connected, label: stats.connected === 1 ? 'share connected now' : 'shares connected now', live: true },
@@ -145,7 +145,7 @@ function home({ viewer, shares = [], connectedIds = new Set(), stats = {}, baseU
                 html: terminal([
                     `$ curl -fsSLO ${CLIENT_URL(baseUrl)}`,
                     '$ node ov-connect.js --key ovc_… --port 8080',
-                    'Connected. https://agents--you.openvibe.website → localhost:8080',
+                    `Connected. https://agents--you.${domain} → localhost:8080`,
                     'GET / → 200 (14 ms)',
                 ]),
                 action: signedIn ? { href: '#new', label: 'Make a share' } : { href: '/auth/login?next=%2F%23new', label: 'Sign in to start' },
@@ -153,7 +153,7 @@ function home({ viewer, shares = [], connectedIds = new Set(), stats = {}, baseU
             {
                 title: 'Open it anywhere, signed in',
                 text: 'Your agent portal, a dev server, a home dashboard: open its address on your phone over 5G. It is real HTTPS, so the microphone, the camera and WebSockets work. Live streams (server-sent events) stream.',
-                html: phone(),
+                html: phone(domain),
             },
             {
                 title: 'You pick who gets in',
@@ -184,7 +184,7 @@ function home({ viewer, shares = [], connectedIds = new Set(), stats = {}, baseU
         network: {
             service: 'website',
             title: 'Part of OpenVibe',
-            lede: 'Connect is the "your machine" half of openvibe.website. The other half builds and hosts sites.',
+            lede: 'Connect shares a port from your machine through OpenVibe Link. Space builds and hosts sites.',
             items: [
                 { to: 'space', what: 'Build and host a site at <name>.openvibe.website', href: 'https://openvibe.space' },
                 { to: 'network', what: 'The sign-in your visitors use', href: 'https://openvibe.network' },
@@ -192,7 +192,7 @@ function home({ viewer, shares = [], connectedIds = new Set(), stats = {}, baseU
             ],
         },
     });
-    const yours = yourShares({ viewer, shares, connectedIds, form });
+    const yours = yourShares({ viewer, shares, connectedIds, form, domain });
     const at = body.indexOf('<section class="sc-room-scenes"');
     return `<div class="cn-wrap">${at < 0 ? body + yours : body.slice(0, at) + yours + body.slice(at)}</div>`;
 }
@@ -428,7 +428,7 @@ function reportForm({ host = '', values = {}, error = null, reasons = {}, signed
 <p>Tell OpenVibe about a share that tricks people, spreads harm or breaks the law. Staff read every report and can close the share. Its owner is not told who reported it.</p></header>
 ${error ? `<p class="cn-error" role="alert">${esc(error)}</p>` : ''}
 <form class="cn-form" method="post" action="/report">
-<label class="cn-field"><span>The share's address</span><input name="host" required maxlength="200" value="${esc(values.host || host)}" placeholder="name--someone.openvibe.website" autocapitalize="none" autocomplete="off" spellcheck="false"></label>
+<label class="cn-field"><span>The share's address</span><input name="host" required maxlength="200" value="${esc(values.host || host)}" placeholder="name--someone.openvibe.link" autocapitalize="none" autocomplete="off" spellcheck="false"></label>
 <fieldset class="cn-modes"><legend>What is wrong</legend>
 ${Object.entries(reasons).map(([k, v]) => `<label><input type="radio" name="reason" value="${esc(k)}"${picked === k ? ' checked' : ''} required> <span>${esc(v)}</span></label>`).join('\n')}
 </fieldset>

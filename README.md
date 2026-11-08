@@ -1,11 +1,13 @@
 # OpenVibe Connect
 
+Shares move to `.openvibe.link` beside their existing `.openvibe.website` aliases. See
+[the staged rollout and host commands](docs/link-share-rollout.md) before deployment.
+
 **Your computer, on the web, privately.** Share one port on your computer at its own HTTPS address,
-`https://<name>--<you>.openvibe.website`, and only the people you pick can open it, signed in with OpenVibe. No router
+`https://<name>--<you>.openvibe.link`, and only the people you pick can open it, signed in with OpenVibe. No router
 settings, no open ports, no app to install: one file and Node.
 
-Live at **[connect.openvibe.website](https://connect.openvibe.website)**. Part of openvibe.website: Connect is the
-"your machine" half; [OpenVibe.Space](https://openvibe.space) builds and hosts sites.
+Live at **[connect.openvibe.website](https://connect.openvibe.website)**. Connect shares ports through Link; [OpenVibe.Space](https://openvibe.space) builds and hosts sites.
 
 ## Use it
 
@@ -18,7 +20,7 @@ Live at **[connect.openvibe.website](https://connect.openvibe.website)**. Part o
    node ov-connect.js --key ovc_… --port 8790
    ```
 
-3. Open `https://agents--you.openvibe.website` anywhere, on a phone over 5G included, and sign in.
+3. Open `https://agents--you.openvibe.link` anywhere, on a phone over 5G included, and sign in.
 
 The client opens one outgoing connection, so it works behind any router or hotspot, and it reconnects by itself. It
 only ever connects to `localhost` on the port you gave it.

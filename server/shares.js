@@ -88,6 +88,7 @@ function hostFor(label, username, domain) {
 
 /** The share label in a host, or null: "agents--alex.openvibe.website" → { label: 'agents', handle: 'alex' }. */
 function parseHost(host, domain) {
+    if (Array.isArray(domain)) return domain.map((d) => parseHost(host, d)).find(Boolean) || null;
     const h = String(host || '').toLowerCase().replace(/:\d+$/, '');
     const suffix = `.${domain}`;
     if (!h.endsWith(suffix)) return null;
@@ -132,10 +133,17 @@ function createShares(s, { config }) {
     const { db } = s;
     const domain = config.shares.domain;
     const scheme = config.shares.scheme;
+    const domains = config.shares.domains || [domain];
+    const aliases = (host) => {
+        const p = parseHost(host, domains);
+        return p ? domains.map((d) => `${p.label}--${p.handle}.${d}`) : [];
+    };
 
     const urlOf = (row) => `${scheme}://${row.host}`;
     function view(row) {
         if (!row) return null;
+        const parsed = parseHost(row.host, domains);
+        if (parsed) row = { ...row, host: `${parsed.label}--${parsed.handle}.${domain}` };
         return {
             id: row.id,
             owner_subject: row.owner_subject,
@@ -175,7 +183,7 @@ function createShares(s, { config }) {
     }
     async function get(id) { return view(await db.maybe('SELECT * FROM shares WHERE id = $1', [String(id || '')])); }
     async function byHost(host) {
-        return view(await db.maybe("SELECT * FROM shares WHERE host = $1 ORDER BY status = 'active' DESC, created_at DESC LIMIT 1", [String(host || '').toLowerCase()]));
+        return view(await db.maybe("SELECT * FROM shares WHERE host = ANY($1::text[]) ORDER BY status = 'active' DESC, created_at DESC LIMIT 1", [aliases(host)]));
     }
     async function byKey(key) {
         if (typeof key !== 'string' || !/^ovc_[A-Za-z0-9_-]{43}$/.test(key)) return null;
@@ -209,7 +217,7 @@ function createShares(s, { config }) {
         if (live.n >= config.shares.perPerson) throw new ShareError(409, 'share.limit', `You have ${live.n} shares open, the most for now. Close one first.`);
         // A host someone else used stays theirs (a revoked share holds its address, so nobody else can serve on links
         // that still point there). The owner may reuse their own.
-        const taken = await db.maybe('SELECT owner_subject, status FROM shares WHERE host = $1 ORDER BY created_at DESC LIMIT 1', [host]);
+        const taken = await db.maybe('SELECT owner_subject, status FROM shares WHERE host = ANY($1::text[]) ORDER BY created_at DESC LIMIT 1', [aliases(host)]);
         if (taken && (taken.status === 'active' || taken.owner_subject !== owner.subject)) {
             throw new ShareError(409, 'share.taken', taken.owner_subject === owner.subject ? 'You already have a share with that name.' : 'That address is taken. Pick another name.');
         }
@@ -243,7 +251,7 @@ function createShares(s, { config }) {
         const policyChanged = mode !== share.mode || JSON.stringify(named) !== JSON.stringify(share.named);
         // offline_site: undefined keeps it; '' / null clears it (not a policy change: nobody is signed out).
         const keepOffline = input.offline_site === undefined;
-        const offline = keepOffline ? null : offlineSite(input.offline_site, { domain, scheme });
+        const offline = keepOffline ? null : offlineSite(input.offline_site, { domain: domain === 'openvibe.link' ? 'openvibe.website' : domain, scheme });
         // expires_in: undefined keeps the time it has; null / '' / 'never' takes it away; seconds set it from now.
         const keepExpiry = input.expires_in === undefined || input.expires_in === 'keep';
         const ttl = keepExpiry ? null : expiresIn(input.expires_in);
@@ -302,7 +310,7 @@ function createShares(s, { config }) {
     // ── Reports (CON-9 v0) ──────────────────────────────────────────────────────────────────────────────────────
     /** Anyone reports a share by its address. Returns { id, share }. */
     async function report({ host, reason, details, reporter = null }) {
-        const parsed = parseHost(String(host || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, ''), domain);
+        const parsed = parseHost(String(host || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, ''), domains);
         const share = parsed ? await byHost(parsed.host) : null;
         if (!share) throw new ShareError(404, 'share.not_found', 'There is no share at that address. Check it, or paste the whole address.');
         if (!REPORT_REASONS[reason]) throw new ShareError(422, 'report.invalid_reason', 'Pick what the report is about.');
