@@ -55,9 +55,10 @@ function createGate({ config, now = () => Date.now() }) {
         return { subject: c.u, username: c.n };
     }
 
-    function cookieHeader(value) {
+    function cookieHeader(value, { embedded = false } = {}) {
         const maxAge = config.shares.sessionHours * 3600;
-        return `${cookieName}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${config.cookies.secure !== false ? '; Secure' : ''}`;
+        const thirdParty = embedded && config.cookies.secure !== false;
+        return `${cookieName}=${value}; Path=/; HttpOnly; SameSite=${thirdParty ? 'None' : 'Lax'}; Max-Age=${maxAge}${config.cookies.secure !== false ? '; Secure' : ''}${thirdParty ? '; Partitioned' : ''}`;
     }
     const clearCookieHeader = () => `${cookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${config.cookies.secure !== false ? '; Secure' : ''}`;
 
