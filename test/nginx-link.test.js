@@ -28,6 +28,8 @@ try {
     }
     execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=localhost', '-keyout', `${dir}/test.key`, '-out', `${dir}/test.pem`], { stdio: 'pipe' });
     const config = src.replace(/include snippets\/security-txt\.conf;/g, '')
+        .replace(/listen (\[::\]:)?80;/g, (_, ip = '') => `listen ${ip}18080;`)
+        .replace(/listen (\[::\]:)?443 ssl;/g, (_, ip = '') => `listen ${ip}18443 ssl;`)
         .replace(/ssl_certificate\s+[^;]+;/g, `ssl_certificate ${dir}/test.pem;`)
         .replace(/ssl_certificate_key\s+[^;]+;/g, `ssl_certificate_key ${dir}/test.key;`)
         .replace(/\/var\/log\/nginx\/[^ ;]+/g, '/dev/null');
