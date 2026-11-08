@@ -8,10 +8,10 @@
  *
  *   1. A visitor without a valid cookie is sent to https://connect.openvibe.website/grant?share=<id>&next=<path>.
  *   2. There, signed in to OpenVibe (sign-in happens first if needed), the share's policy is checked. A person it lets
- *      in gets a one-time code (60 seconds, used once, bound to that share) and goes back to
+ *      in gets a one-time code (60 seconds, used once, bound to that share and host) and goes back to
  *      https://<share host>/__ovc/callback?code=…&next=….
  *   3. The share host swaps the code for its own cookie: `__Host-ovc` (Secure, HttpOnly, SameSite=Lax, Path=/, no
- *      Domain), an HMAC-signed { share, subject, username, policy version, expiry }.
+ *      Domain), an HMAC-signed { share, host audience, subject, username, policy version, expiry }.
  *
  * A policy change bumps the share's policy_version, so every cookie made before it stops working on the next request
  * and its holder goes through the grant again (the owner never notices: they are let straight back in).
@@ -34,9 +34,9 @@ function createGate({ config, now = () => Date.now() }) {
 
     const mac = (data) => crypto.createHmac('sha256', secret).update(data).digest('base64url');
 
-    function sign({ shareId, subject, username, policyVersion }) {
+    function sign({ shareId, subject, username, policyVersion, host }) {
         const exp = now() + config.shares.sessionHours * 3600_000;
-        const data = Buffer.from(JSON.stringify({ s: shareId, u: subject, n: username || null, v: policyVersion, e: exp })).toString('base64url');
+        const data = Buffer.from(JSON.stringify({ s: shareId, a: host, u: subject, n: username || null, v: policyVersion, e: exp })).toString('base64url');
         return `${data}.${mac(data)}`;
     }
 
@@ -51,7 +51,7 @@ function createGate({ config, now = () => Date.now() }) {
         if (sig.length !== want.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return null;
         let c;
         try { c = JSON.parse(Buffer.from(data, 'base64url').toString('utf8')); } catch { return null; }
-        if (!c || c.s !== share.id || c.v !== share.policy_version || !(c.e > now())) return null;
+        if (!c || c.s !== share.id || c.a !== share.host || c.v !== share.policy_version || !(c.e > now())) return null;
         return { subject: c.u, username: c.n };
     }
 
@@ -76,17 +76,17 @@ function createGate({ config, now = () => Date.now() }) {
         return { ours, rest: rest.join('; ') };
     }
 
-    function mintCode({ shareId, subject, username }) {
+    function mintCode({ shareId, subject, username, host }) {
         const code = crypto.randomBytes(24).toString('base64url');
-        codes.set(code, { shareId, subject, username, exp: now() + CODE_TTL_MS });
+        codes.set(code, { shareId, subject, username, host, exp: now() + CODE_TTL_MS });
         return code;
     }
-    function redeemCode(code, shareId) {
+    function redeemCode(code, shareId, host) {
         if (typeof code !== 'string') return null;
         const v = codes.get(code);
         if (!v) return null;
         codes.delete(code);
-        if (v.exp <= now() || v.shareId !== shareId) return null;
+        if (v.exp <= now() || v.shareId !== shareId || v.host !== host) return null;
         return v;
     }
 

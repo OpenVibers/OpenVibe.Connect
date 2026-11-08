@@ -79,9 +79,9 @@ function createOAuth(s, { shares, scheme = 'https', now = () => Date.now() } = {
     async function shareFor(resource) {
         let u;
         try { u = new URL(String(resource || '')); } catch { return null; }
-        if (u.protocol !== `${scheme}:`) return null;   // https in production (CONNECT_SHARE_SCHEME)
+        if (u.protocol !== `${scheme}:` || u.port || u.username || u.password) return null;   // https in production (CONNECT_SHARE_SCHEME)
         const share = await shares.byHost(u.host.toLowerCase());
-        return share && share.status === 'active' ? share : null;
+        return share && share.status === 'active' ? { ...share, host: u.hostname, url: u.origin } : null;
     }
 
     /**
@@ -102,17 +102,17 @@ function createOAuth(s, { shares, scheme = 'https', now = () => Date.now() } = {
     function issueCode({ client: c, share, viewer, redirectUri, challenge }) {
         sweep();
         const code = b64url(crypto.randomBytes(32));
-        codes.set(code, { clientId: c.id, redirectUri, challenge, shareId: share.id, subject: viewer.subject, username: viewer.username || null, policyVersion: share.policy_version, exp: now() + CODE_TTL_MS });
+        codes.set(code, { clientId: c.id, redirectUri, challenge, shareId: share.id, host: share.host, subject: viewer.subject, username: viewer.username || null, policyVersion: share.policy_version, exp: now() + CODE_TTL_MS });
         return code;
     }
 
-    async function mintTokens({ shareId, clientId, subject, username, policyVersion }) {
+    async function mintTokens({ shareId, clientId, subject, username, policyVersion, host }) {
         const access = `ovat_${b64url(crypto.randomBytes(32))}`;
         const refresh = `ovrt_${b64url(crypto.randomBytes(32))}`;
         const id = s.newId('sot');
-        await db.exec(`INSERT INTO share_oauth_tokens (id, share_id, client_id, subject, username, policy_version, access_hash, access_expires_at, refresh_hash, refresh_expires_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-            [id, shareId, clientId, subject, username, policyVersion, sha256(access), new Date(now() + ACCESS_TTL_MS), sha256(refresh), new Date(now() + REFRESH_TTL_MS)]);
+        await db.exec(`INSERT INTO share_oauth_tokens (id, share_id, client_id, subject, username, policy_version, access_hash, access_expires_at, refresh_hash, refresh_expires_at, resource_host)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+            [id, shareId, clientId, subject, username, policyVersion, sha256(access), new Date(now() + ACCESS_TTL_MS), sha256(refresh), new Date(now() + REFRESH_TTL_MS), host]);
         db.exec('UPDATE oauth_clients SET last_used_at = now() WHERE id = $1', [clientId]).catch(() => {});
         return { access_token: access, token_type: 'Bearer', expires_in: Math.round(ACCESS_TTL_MS / 1000), refresh_token: refresh, scope: 'share' };
     }
@@ -127,7 +127,7 @@ function createOAuth(s, { shares, scheme = 'https', now = () => Date.now() } = {
             if (b.client_id !== g.clientId || b.redirect_uri !== g.redirectUri) throw new OAuthError(400, 'invalid_grant', 'The code was given to another client or redirect_uri.');
             const verifier = String(b.code_verifier || '');
             if (!/^[A-Za-z0-9._~-]{43,128}$/.test(verifier) || b64url(crypto.createHash('sha256').update(verifier).digest()) !== g.challenge) throw new OAuthError(400, 'invalid_grant', 'The PKCE code_verifier does not match.');
-            if (b.resource) { const share = await shareFor(b.resource); if (!share || share.id !== g.shareId) throw new OAuthError(400, 'invalid_target', 'resource is not the share the code was for'); }
+            if (b.resource) { const share = await shareFor(b.resource); if (!share || share.id !== g.shareId || share.host !== g.host) throw new OAuthError(400, 'invalid_target', 'resource is not the share the code was for'); }
             return mintTokens(g);
         }
         if (b.grant_type === 'refresh_token') {
@@ -143,9 +143,13 @@ function createOAuth(s, { shares, scheme = 'https', now = () => Date.now() } = {
                 await db.exec('UPDATE share_oauth_tokens SET revoked_at = now() WHERE id = $1', [r.id]);
                 throw new OAuthError(400, 'invalid_grant', 'The share changed who it lets in: sign in again.');
             }
+            if (b.resource) {
+                const resource = await shareFor(b.resource);
+                if (!resource || resource.id !== r.share_id || resource.host !== r.resource_host) throw new OAuthError(400, 'invalid_target', 'resource is not the host the refresh token was for');
+            }
             // Rotation: this row ends, a new one starts; the old refresh token used again finds a revoked row.
             await db.exec('UPDATE share_oauth_tokens SET revoked_at = now() WHERE id = $1', [r.id]);
-            return mintTokens({ shareId: r.share_id, clientId: r.client_id, subject: r.subject, username: r.username, policyVersion: Number(r.policy_version) });
+            return mintTokens({ shareId: r.share_id, clientId: r.client_id, subject: r.subject, username: r.username, policyVersion: Number(r.policy_version), host: r.resource_host });
         }
         throw new OAuthError(400, 'unsupported_grant_type', 'grant_type is authorization_code or refresh_token');
     }
@@ -156,7 +160,7 @@ function createOAuth(s, { shares, scheme = 'https', now = () => Date.now() } = {
         if (!share || share.status !== 'active' || !ACCESS_RE.test(String(accessToken || ''))) return null;
         const r = await db.maybe(`SELECT t.*, c.name AS client_name FROM share_oauth_tokens t JOIN oauth_clients c ON c.id = t.client_id
             WHERE t.access_hash = $1 AND t.share_id = $2 AND t.revoked_at IS NULL`, [sha256(accessToken), share.id]);
-        if (!r || new Date(r.access_expires_at).getTime() <= now() || Number(r.policy_version) !== share.policy_version) return null;
+        if (!r || r.resource_host !== share.host || new Date(r.access_expires_at).getTime() <= now() || Number(r.policy_version) !== share.policy_version) return null;
         if (!shares.allows(share, { subject: r.subject, username: r.username })) return null;
         const t = now();
         if (!touched.has(r.id) || t - touched.get(r.id) > 60_000) {
