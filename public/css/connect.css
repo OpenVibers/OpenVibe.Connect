@@ -1,5 +1,5 @@
 /* OpenVibe Connect: the pieces sc.room does not draw. Every colour is a theme token (kit.css, room.css); the room's
-   accent is openvibe.website's (--room-accent / --room-fill / --room-on). Phone first; nothing moves on its own. */
+   accent is the Website room's (--room-accent / --room-fill / --room-on). Phone first; nothing moves on its own. */
 
 .cn-wrap { max-width: 1120px; margin: 0 auto; padding: 0 max(16px, env(safe-area-inset-left, 0px)) 48px; }
 .cn-page { max-width: 760px; padding-top: 20px; display: grid; gap: 22px; }

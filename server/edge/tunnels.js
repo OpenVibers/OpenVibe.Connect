@@ -2,7 +2,7 @@
 
 /**
  * The tunnels: one WebSocket per connected share, opened by the client (public/ov-connect.js) to
- * wss://connect.openvibe.website/tunnel and authenticated by its first message, { t: 'hello', key }.
+ * wss://connect.openvibe.link/tunnel and authenticated by its first message, { t: 'hello', key }.
  *
  *   createTunnels({ shares, config, log }) → { handleUpgrade(req, socket, head), get(shareId), close(shareId, code, why),
  *                                              closeAll(), status() }

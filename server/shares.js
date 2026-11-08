@@ -47,13 +47,13 @@ const SIGNIN_NOT_YET = '"Anyone signed in" opens with the abuse check. For now, 
 const isStaff = (owner) => Boolean(owner && owner.role === 'admin');
 // A Space site's name: one DNS label with single hyphens, so never a share's "--" host (OpenVibe.Space's NAME_RE).
 const SITE_LABEL_RE = /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,62}$/;
-const OFFLINE_SITE_HELP = 'The fallback is one of the sites on this domain, such as your OpenVibe.Space site: https://<name>.openvibe.website, optionally with a path.';
+const OFFLINE_SITE_HELP = 'The fallback is one of your OpenVibe.Space sites: https://<name>.openvibe.website, optionally with a path.';
 
 /**
  * Where a browser goes while a share's computer is off (CON-17): '' / null / undefined-as-cleared → null; otherwise
- * a site on the share domain itself (https://<name>.<domain>, one label, never a share's "--" host), no port and no
- * credentials, a path and query allowed, the fragment dropped. Anything else throws, so a share can never send its
- * visitors off the domain.
+ * a Space site on the Website domain (https://<name>.openvibe.website, one label, never a share's "--" host), no port
+ * and no credentials, a path and query allowed, the fragment dropped. Anything else throws, so a share can never send
+ * its visitors off the allowed domain.
  */
 function offlineSite(value, { domain, scheme = 'https' }) {
     if (value == null || String(value).trim() === '') return null;
@@ -86,7 +86,7 @@ function hostFor(label, username, domain) {
     return `${first}.${domain}`;
 }
 
-/** The share label in a host, or null: "agents--alex.openvibe.website" → { label: 'agents', handle: 'alex' }. */
+/** The share label in a host, or null: "agents--alex.openvibe.link" → { label: 'agents', handle: 'alex' }. */
 function parseHost(host, domain) {
     if (Array.isArray(domain)) return domain.map((d) => parseHost(host, d)).find(Boolean) || null;
     const h = String(host || '').toLowerCase().replace(/:\d+$/, '');

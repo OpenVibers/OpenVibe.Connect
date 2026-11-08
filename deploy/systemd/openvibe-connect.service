@@ -1,5 +1,5 @@
 [Unit]
-Description=OpenVibe Connect — your computer, on the web, privately (connect.openvibe.website and every <name>--<user>.openvibe.website)
+Description=OpenVibe Connect — your computer, on the web, privately (connect.openvibe.link and every <name>--<user>.openvibe.link)
 # Network (sign-in, JWKS, account events) should be up first, but Connect degrades honestly without it: connected
 # shares keep passing requests for people already let in, and sign-in waits for the signing key (see /api/ready).
 After=network.target postgresql.service pgbouncer.service valkey-server.service

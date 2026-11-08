@@ -2,7 +2,7 @@
   "name": "openvibe-connect",
   "version": "0.1.0",
   "private": true,
-  "description": "OpenVibe Connect: share one port on your computer at its own HTTPS address on openvibe.website, behind OpenVibe sign-in.",
+  "description": "OpenVibe Connect: share one port on your computer at its own HTTPS address on openvibe.link, behind OpenVibe sign-in.",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",

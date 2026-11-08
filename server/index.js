@@ -2,7 +2,7 @@
 
 /**
  * OpenVibe.Connect: process entry. `node server/index.js`
- * Listens on PORT (5240) behind nginx (deploy/): connect.openvibe.website and every <label>--<user>.openvibe.website.
+ * Listens on PORT (5240) behind nginx (deploy/): connect.openvibe.link and every <label>--<user>.openvibe.link.
  */
 const { createApp } = require('./app');
 const { gracefulStop } = require('openvibe-sdk/service');

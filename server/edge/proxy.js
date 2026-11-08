@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * The visitor's side of a share: every request to https://<label>--<user>.openvibe.website.
+ * The visitor's side of a share: every request to https://<label>--<user>.openvibe.link.
  *
  *   handle(req, res)               an HTTP request (SSE and streaming bodies included)
  *   upgrade(req, socket, head)     a WebSocket upgrade: after the gate, a byte pipe to the local port
@@ -13,8 +13,8 @@
  * X-Forwarded-Host, the visitor's address in X-Forwarded-For, and who they are in X-OpenVibe-User and
  * X-OpenVibe-Subject (headers of those names from the visitor are dropped). The gate's own cookie never reaches it.
  *
- * Responses: a Set-Cookie's Domain attribute is removed (until openvibe.website is on the Public Suffix List, a
- * cookie for .openvibe.website would reach every other share and every Space site), and nothing a share sends may be
+ * Responses: a Set-Cookie's Domain attribute is removed (until openvibe.link is on the Public Suffix List, a
+ * cookie for .openvibe.link would reach every other share), and nothing a share sends may be
  * kept by Cloudflare's cache (Cloudflare-CDN-Cache-Control: no-store; Cache-Control is made private): a cached copy
  * would be served past the gate.
  */
