@@ -53,7 +53,8 @@ sudo certbot certonly --manual --preferred-challenges dns --cert-name openvibe.l
   -d openvibe.link -d www.openvibe.link -d '*.openvibe.link'
 ```
 
-Create the `_acme-challenge.openvibe.link` TXT values Certbot requests in Cloudflare (keep all simultaneously
+Create each TXT record Certbot requests in Cloudflare (`_acme-challenge.openvibe.link` for apex/wildcard and
+`_acme-challenge.www.openvibe.link` if requested for www; keep all simultaneously
 requested values until validation finishes), then continue Certbot. This manual alternative requires a DNS hook
 or manual renewal before expiry; preserve/configure automated DNS-01 renewal before considering rollout complete.
 Do not replace the Website certificate. The Link certificate must exist **before** the combined vhost is installed.

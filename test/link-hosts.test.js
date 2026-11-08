@@ -114,5 +114,38 @@ function upgrade(t, host, cookie) {
             for (const host of [old, made.share.host]) assert.equal((await t.share(host, '/', { cookie: cookies[host] })).status, 410);
         });
     } finally { await t.close(); await app.close(); }
+    await check('new control origin uses its exact callback and host-only SSO; old control pages redirect', async () => {
+        const n = await boot({ env: { BASE_URL: 'https://connect.openvibe.link', CONNECT_SHARE_DOMAIN: null, COOKIE_SECURE: 'true' } });
+        try {
+            const user = n.network.addUser('kim');
+            const old = await n.share('connect.openvibe.website', '/auth/login?next=%2Fshares');
+            assert.equal(old.status, 302);
+            assert.equal(old.headers.location, 'https://connect.openvibe.link/auth/login?next=%2Fshares');
+            const login = await n.share('connect.openvibe.link', '/auth/login?next=%2Fshares');
+            const authorize = new URL(login.headers.location);
+            assert.equal(authorize.searchParams.get('redirect_uri'), 'https://connect.openvibe.link/auth/callback');
+            const code = n.network.issueCode(user, authorize.searchParams.get('code_challenge'));
+            const cookie = login.headers['set-cookie'].map(c => c.split(';')[0]).join('; ');
+            const callback = await n.share('connect.openvibe.link', `/auth/callback?code=${code}&state=${authorize.searchParams.get('state')}`, { cookie });
+            assert.equal(callback.status, 302);
+            assert.equal(callback.headers.location, '/shares');
+            assert.ok(callback.headers['set-cookie'].some(c => c.startsWith('ov_token=')));
+            for (const c of callback.headers['set-cookie']) assert.doesNotMatch(c, /domain=/i);
+            const share = await n.makeShare(user, { label: 'tunnel', port: 9000 });
+            for (const host of ['connect.openvibe.website', 'connect.openvibe.link']) {
+                const WebSocket = require('ws');
+                const ws = new WebSocket(`ws://127.0.0.1:${n.port}/tunnel`, { headers: { Host: host } });
+                try {
+                    const ready = await new Promise((resolve, reject) => {
+                        ws.on('error', reject);
+                        ws.on('open', () => ws.send(JSON.stringify({ t: 'hello', v: 1, key: share.key, port: 9000 })));
+                        ws.on('message', d => resolve(JSON.parse(String(d))));
+                    });
+                    assert.equal(ready.t, 'ready');
+                    assert.equal(ready.share.host, share.share.host);
+                } finally { ws.terminate(); }
+            }
+        } finally { await n.close(); }
+    });
     done();
 })();
