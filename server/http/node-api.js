@@ -11,11 +11,15 @@
  * The tunnel token is in this answer only, and is never logged.
  */
 const { http } = require('openvibe-contracts');
+const express = require('express');
 const { asyncRouter } = require('./router');
+const { verify } = require('../party-grants');
+const { ShareError } = require('../shares');
 
 function createNodeApi(ctx) {
-    const { shares, nodeAuth } = ctx;
+    const { shares, nodeAuth, tunnels, proxy, config } = ctx;
     const r = asyncRouter();
+    r.use(express.json({ limit: '4kb' }));
     r.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
     const fail = (res, req, status, code, detail) => http.sendProblem(res, status, code, { detail, ctx: req.ov });
 
@@ -31,6 +35,42 @@ function createNodeApi(ctx) {
     const brief = (s) => ({ id: s.id, host: s.host, url: s.url, local_port: s.local_port, mode: s.mode });
 
     r.get('/shares', async (req, res) => res.json({ shares: (await shares.byNode(req.node)).map(brief) }));
+
+    r.post('/party-shares', async (req, res) => {
+        const claim = verify(req.body && req.body.grant, config.partySharedSecret);
+        if (!claim || claim.type !== 'create' || claim.node !== req.node)
+            return fail(res, req, 403, 'party.invalid_grant', 'Chat did not authorize this party for this machine');
+        try {
+            const share = await shares.createParty(claim);
+            return res.status(201).json({ share: brief(share) });
+        } catch (err) {
+            if (err instanceof ShareError) return fail(res, req, err.status, err.code, err.message);
+            throw err;
+        }
+    });
+
+    r.put('/shares/:id/party-members', async (req, res) => {
+        try {
+            const share = await shares.partyMembers(await shares.get(req.params.id), req.node, req.body && req.body.members);
+            proxy.forget(share.host);
+            return res.json({ share: brief(share) });
+        } catch (err) {
+            if (err instanceof ShareError) return fail(res, req, err.status, err.code, err.message);
+            throw err;
+        }
+    });
+
+    r.delete('/shares/:id/party', async (req, res) => {
+        try {
+            const share = await shares.closeParty(await shares.get(req.params.id), req.node);
+            tunnels.close(share.id, 4003, 'party ended');
+            proxy.forget(share.host);
+            return res.json({ share: brief(share) });
+        } catch (err) {
+            if (err instanceof ShareError) return fail(res, req, err.status, err.code, err.message);
+            throw err;
+        }
+    });
 
     r.post('/shares/:id/tunnel-token', async (req, res) => {
         const share = await shares.get(req.params.id);

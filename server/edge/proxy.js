@@ -22,6 +22,7 @@ const { parseHost } = require('../shares');
 
 const HOP = new Set(['connection', 'keep-alive', 'proxy-connection', 'proxy-authorization', 'proxy-authenticate', 'te', 'trailer', 'transfer-encoding', 'upgrade']);
 const DROP_IN = /^(host|cookie|forwarded|x-forwarded-.*|x-real-ip|x-openvibe-.*|cf-.*|cdn-loop|true-client-ip)$/;
+const { verify: verifyPartyGrant } = require('../party-grants');
 const SHARE_CACHE_MS = 5000;
 
 /**
@@ -129,7 +130,7 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = nu
         return out;
     }
 
-    function responseHeaders(pairs) {
+    function responseHeaders(pairs, share = null) {
         const out = {};
         const cookies = [];
         let cacheControl = null;
@@ -140,7 +141,7 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = nu
             if (!/^[!#$%&'*+.^_`|~0-9a-z-]{1,100}$/.test(name) || /[\r\n\0]/.test(value)) continue;
             if (HOP.has(name) || name === 'cloudflare-cdn-cache-control' || name === 'cdn-cache-control' || name === 'x-robots-tag') continue;
             if (name === 'set-cookie') {
-                const c = scrubCookie(value);
+                const c = scrubCookie(value, !!(share && share.party_slug));
                 if (c) cookies.push(c);
                 continue;
             }
@@ -152,17 +153,23 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = nu
         out['cache-control'] = privateCache(cacheControl);
         out['cloudflare-cdn-cache-control'] = 'no-store';
         out['x-robots-tag'] = 'noindex, nofollow';
-        // A local app is not a first-party card. Keep its own CSP and add an independent framing policy.
-        out['content-security-policy'] = [].concat(out['content-security-policy'] || [], "frame-ancestors 'none'");
-        out['x-frame-options'] = 'DENY';
+        // The party client is framed by openvibe.party. Replace any upstream
+        // frame-ancestors directive; multiple CSP headers are all enforced.
+        const csp = [].concat(out['content-security-policy'] || []).map((value) =>
+            share && share.party_slug ? value.replace(/(?:^|;)\s*frame-ancestors\s+[^;]*/gi, '') : value).filter(Boolean);
+        out['content-security-policy'] = [...csp, share && share.party_slug ? 'frame-ancestors https://openvibe.party' : "frame-ancestors 'none'"];
+        if (share && share.party_slug) delete out['x-frame-options'];
+        else out['x-frame-options'] = 'DENY';
         return out;
     }
 
-    function scrubCookie(value) {
+    function scrubCookie(value, party = false) {
         const parts = value.split(';');
         const name = parts[0].split('=')[0].trim();
         if (name === gate.cookieName || name === '__Host-ovc' || name === 'ovc') return null;
-        return parts.filter((p, i) => i === 0 || !/^\s*domain\s*=/i.test(p)).join(';');
+        if (!party) return parts.filter((p, i) => i === 0 || !/^\s*domain\s*=/i.test(p)).join(';');
+        const clean = parts.filter((p, i) => i === 0 || !/^\s*(domain|samesite|partitioned|secure)\s*(=|$)/i.test(p)).join(';');
+        return `${clean}; SameSite=None; Secure; Partitioned`;
     }
 
     // ── Pages the gate answers itself (self-contained: a share host loads nothing from anywhere else) ──
@@ -284,6 +291,28 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = nu
         const url = String(req.url || '/');
         const path = url.split('?')[0];
 
+        if (share.party_slug && path === '/__ovc/party') {
+            const headers = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store',
+                'content-security-policy': "default-src 'none'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors https://openvibe.party",
+                'referrer-policy': 'no-referrer', 'x-robots-tag': 'noindex, nofollow' };
+            if (req.method === 'GET') {
+                res.writeHead(200, headers);
+                return res.end('<!doctype html><meta charset="utf-8"><title>Opening the party computer</title><p>Opening the shared computer…</p><script>const ticket=location.hash.slice(1);history.replaceState(null,"","/__ovc/party");fetch("/__ovc/party",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({ticket}),credentials:"same-origin"}).then(r=>{if(!r.ok)throw Error();return r.json()}).then(v=>location.replace("/?embed=1&usr="+encodeURIComponent(v.username)+"&pwd=party")).catch(()=>{document.querySelector("p").textContent="This party invite has expired. Return to the party and try again."})</script>');
+            }
+            if (req.method !== 'POST' || String(req.headers.origin || '') !== `${config.shares.scheme}://${share.host}`)
+                return sendProblem(req, res, 403, 'party.origin', 'Not from this share', 'Open the party from openvibe.party.');
+            let body = '';
+            for await (const chunk of req) { body += chunk; if (body.length > 5000) return sendProblem(req, res, 413, 'party.ticket', 'Ticket too long', 'Return to the party and try again.'); }
+            let value;
+            try { value = JSON.parse(body).ticket; } catch { value = null; }
+            const claim = verifyPartyGrant(value, config.partySharedSecret);
+            if (!claim || claim.type !== 'access' || claim.share !== share.id || !shares.allows(share, { subject: claim.subject, username: claim.username }))
+                return sendProblem(req, res, 403, 'party.ticket', 'Invite expired', 'Return to the party and try again.');
+            const cookie = gate.sign({ shareId: share.id, subject: claim.subject, username: claim.username, policyVersion: share.policy_version, host: share.host });
+            res.writeHead(200, { 'set-cookie': gate.cookieHeader(cookie, { embedded: true }), 'content-type': 'application/json', 'cache-control': 'no-store' });
+            return res.end(JSON.stringify({ username: claim.username }));
+        }
+
         if (path === '/__ovc/callback') {
             const q = new URL(url, 'http://x').searchParams;
             const v = gate.redeemCode(q.get('code'), share.id, share.host);
@@ -347,7 +376,7 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = nu
                     return sendProblem(req, res, 502, 'bad_response', 'The app answered something odd', 'The app on the other end sent a response OpenVibe Connect cannot pass on.');
                 }
                 rec.status = status;
-                try { res.writeHead(status, responseHeaders(m.headers)); } catch { tunnel.abort(id, 'bad_headers'); res.destroy(); }
+                try { res.writeHead(status, responseHeaders(m.headers, share)); } catch { tunnel.abort(id, 'bad_headers'); res.destroy(); }
                 return undefined;
             },
             onData(buf) {

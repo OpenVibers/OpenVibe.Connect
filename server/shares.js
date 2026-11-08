@@ -153,6 +153,7 @@ function createShares(s, { config }) {
             url: urlOf(row),
             local_port: Number(row.local_port),
             mode: row.mode,
+            party_slug: row.party_slug || null,
             named: Array.isArray(row.named) ? row.named : [],
             status: row.status,
             policy_version: Number(row.policy_version),
@@ -239,6 +240,7 @@ function createShares(s, { config }) {
 
     async function setPolicy(owner, id, input = {}) {
         const share = await owned(owner, id);
+        if (share.party_slug) throw new ShareError(403, 'share.party_managed', 'The party manages this share');
         if (share.status !== 'active') throw new ShareError(410, 'share.revoked', 'That share is closed.');
         const mode = input.mode == null ? share.mode : String(input.mode);
         if (mode === 'public') throw new ShareError(422, 'share.public_not_yet', 'Public shares open once the abuse check is in.');
@@ -268,6 +270,7 @@ function createShares(s, { config }) {
 
     async function rotateKey(owner, id) {
         const share = await owned(owner, id);
+        if (share.party_slug) throw new ShareError(403, 'share.party_managed', 'The party manages this share');
         if (share.status !== 'active') throw new ShareError(410, 'share.revoked', 'That share is closed.');
         const key = newKey();
         // A new key means the key serves it: a computer bound as OpenVibe Link is let go (CON-4).
@@ -283,6 +286,7 @@ function createShares(s, { config }) {
      */
     async function bindNode(owner, id, machine) {
         const share = await owned(owner, id);
+        if (share.party_slug) throw new ShareError(403, 'share.party_managed', 'The party manages this share');
         if (share.status !== 'active') throw new ShareError(410, 'share.revoked', 'That share is closed.');
         const key = newKey();
         if (machine) {
@@ -298,6 +302,44 @@ function createShares(s, { config }) {
     async function byNode(nodeId) {
         const rows = await db.many("SELECT * FROM shares WHERE node_id = $1 AND status = 'active' ORDER BY created_at DESC LIMIT 100", [String(nodeId || '')]);
         return rows.map(view);
+    }
+
+    async function createParty({ party, owner, username, node, port }) {
+        if (!/^party-[a-f0-9]{8}$/.test(String(party || '')) || !/^usr_[0-9A-HJKMNP-TV-Z]{26}$/.test(String(owner || '')) ||
+            !/^nod_[0-9A-HJKMNP-TV-Z]{26}$/.test(String(node || ''))) throw new ShareError(422, 'party.invalid', 'Invalid party or machine');
+        const existing = await db.maybe("SELECT * FROM shares WHERE party_slug = $1 AND status = 'active'", [party]);
+        if (existing) {
+            const current = view(existing);
+            if (current.owner_subject !== owner || !current.node || current.node.id !== node || current.local_port !== port)
+                throw new ShareError(409, 'party.in_use', 'This party is already hosted elsewhere');
+            return current;
+        }
+        const acting = { subject: owner, username, role: 'admin' };
+        const { share } = await create(acting, { label: party, port, mode: 'named', named: [username], expires_in: 86400, note: 'Shared party computer' });
+        try {
+            await bindNode(acting, share.id, { id: node, name: 'Party host' });
+            await db.exec('UPDATE shares SET party_slug = $2 WHERE id = $1', [share.id, party]);
+            return get(share.id);
+        } catch (err) {
+            await revoke(acting, share.id);
+            throw err;
+        }
+    }
+
+    async function partyMembers(share, node, members) {
+        if (!share || !share.party_slug || !share.node || share.node.id !== node || share.status !== 'active')
+            throw new ShareError(404, 'party.not_found', 'No such party share');
+        const named = normalizeNamed(members);
+        if (!named.includes(String(share.owner_username).toLowerCase())) named.push(String(share.owner_username).toLowerCase());
+        if (JSON.stringify(named) !== JSON.stringify(share.named)) {
+            await db.exec('UPDATE shares SET named = $2::jsonb, policy_version = policy_version + 1, updated_at = now() WHERE id = $1', [share.id, JSON.stringify(named)]);
+        }
+        return get(share.id);
+    }
+
+    async function closeParty(share, node) {
+        if (!share || !share.party_slug || !share.node || share.node.id !== node) throw new ShareError(404, 'party.not_found', 'No such party share');
+        return revoke({ subject: share.owner_subject }, share.id);
     }
 
     async function revoke(owner, id) {
@@ -406,7 +448,7 @@ function createShares(s, { config }) {
         return false;
     }
 
-    return { create, list, get, byHost, byKey, byNode, bindNode, setPolicy, rotateKey, revoke, expireDue, report, openReports, handleReport, addWaiter, takeWaiters, touchConnected, flushCounters, visits, allows, view, domain };
+    return { create, createParty, partyMembers, closeParty, list, get, byHost, byKey, byNode, bindNode, setPolicy, rotateKey, revoke, expireDue, report, openReports, handleReport, addWaiter, takeWaiters, touchConnected, flushCounters, visits, allows, view, domain };
 }
 
 function iso(v) {
