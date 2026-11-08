@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Connect's pages on connect.openvibe.website. They work without JavaScript: forms are plain POSTs.
+ * Connect's pages on connect.openvibe.link. They work without JavaScript: forms are plain POSTs.
  *
  *   /                          the front door; signed in, your shares and the form to make one
  *   POST /shares               make a share → its page, with the key shown once
@@ -32,6 +32,7 @@ const seo = require('openvibe-shared/seo');
 
 function createPageRoutes(ctx) {
     const { config, shares, tunnels, gate, proxy, machines, hooks, apiKeys } = ctx;
+    const host = new URL(config.baseUrl).host;
     const r = asyncRouter();
     r.use(express.urlencoded({ extended: false, limit: '16kb' }));
     const page = (req, res, o, status = 200) => send(res, status, { viewer: req.viewer, config, path: req.originalUrl, ...o });
@@ -41,7 +42,7 @@ function createPageRoutes(ctx) {
     const guard = (req, res) => {
         if (!signedIn(req)) { res.redirect(303, loginTo(req.originalUrl)); return false; }
         if (!sameOrigin(req, config.baseUrl)) {
-            page(req, res, { title: 'Not from this site', body: views.message({ title: 'That came from somewhere else', text: 'Changes to your shares must be made on connect.openvibe.website itself.', link: { href: '/', label: 'Your shares' } }) }, 403);
+            page(req, res, { title: 'Not from this site', body: views.message({ title: 'That came from somewhere else', text: `Changes to your shares must be made on ${host} itself.`, link: { href: '/', label: 'Your shares' } }) }, 403);
             return false;
         }
         return true;
@@ -274,7 +275,7 @@ function createPageRoutes(ctx) {
     r.post('/report', async (req, res) => {
         const values = { host: req.body.host, reason: req.body.reason, details: req.body.details };
         const again = (status, error) => page(req, res, { title: 'Report a share', body: views.reportForm({ values, error, reasons: REPORT_REASONS, signedIn: signedIn(req) }) }, status);
-        if (!sameOrigin(req, config.baseUrl)) return again(403, 'Send the report from connect.openvibe.website itself.');
+        if (!sameOrigin(req, config.baseUrl)) return again(403, `Send the report from ${host} itself.`);
         if (overReports(req)) return again(429, 'That is a lot of reports in an hour. Try again later, or write to OpenVibe from the Help site.');
         try {
             await shares.report({ host: values.host, reason: values.reason, details: values.details, reporter: signedIn(req) ? req.viewer.subject : null });
@@ -297,7 +298,7 @@ function createPageRoutes(ctx) {
     });
     r.post('/admin/reports/:id/:action', async (req, res) => {
         if (!staffOnly(req, res)) return undefined;
-        if (!sameOrigin(req, config.baseUrl)) return page(req, res, { title: 'Not from this site', body: views.message({ title: 'That came from somewhere else', text: 'Handle reports on connect.openvibe.website itself.', link: { href: '/admin/reports', label: 'Reports' } }) }, 403);
+        if (!sameOrigin(req, config.baseUrl)) return page(req, res, { title: 'Not from this site', body: views.message({ title: 'That came from somewhere else', text: `Handle reports on ${host} itself.`, link: { href: '/admin/reports', label: 'Reports' } }) }, 403);
         try {
             const out = await shares.handleReport(owner(req), req.params.id, req.params.action);
             if (out.action === 'close' && out.share) {
@@ -325,9 +326,9 @@ function createPageRoutes(ctx) {
 
     // What llms.txt says (SEO-33: /llms-full.txt adds the README, Connect's full documentation, after it).
     const NAME = 'OpenVibe Connect';
-    const SUMMARY = 'Share one port on your computer at https://<name>--<username>.openvibe.website, behind OpenVibe sign-in.';
+    const SUMMARY = `Share one port on your computer at https://<name>--<username>.${config.shares.domain}, behind OpenVibe sign-in.`;
     const DETAILS = [
-        'Client: one file, Node 22+: curl -fsSLO https://connect.openvibe.website/ov-connect.js; node ov-connect.js --key ovc_… --port 8080.',
+        `Client: one file, Node 22+: curl -fsSLO ${site}/ov-connect.js; node ov-connect.js --key ovc_… --port 8080.`,
         'Who can open a share: only the owner, the owner and named OpenVibe usernames, or anyone signed in to OpenVibe. No public shares yet.',
         'The app behind a share receives X-OpenVibe-User and X-OpenVibe-Subject; Host is localhost:<port>.',
         'API (a person\'s Network token as a Bearer): GET/POST /api/v1/shares, GET/PATCH/DELETE /api/v1/shares/{id}, POST /api/v1/shares/{id}/key.',

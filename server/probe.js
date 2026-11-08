@@ -65,7 +65,7 @@ function createProbe({ shares, proxy, config, log = console, now = () => Date.no
         if (!force && now() - at < DAY_MS) return null;
         last.set(share.id, now());
         if (last.size > 10000) last.delete(last.keys().next().value);
-        const out = await proxy.fetchThrough(share, { path: '/', headers: [['x-openvibe-probe', signature(share.id, secret, Math.floor(now() / 1000))], ['user-agent', 'OpenVibeConnectProbe/1 (+https://connect.openvibe.website/report)']] });
+        const out = await proxy.fetchThrough(share, { path: '/', headers: [['x-openvibe-probe', signature(share.id, secret, Math.floor(now() / 1000))], ['user-agent', `OpenVibeConnectProbe/1 (+${String(config.baseUrl).replace(/\/+$/, '')}/report)`]] });
         if (!out || out.offline || out.error || !out.body) return null;
         if (!/html/i.test(out.type || '') && !/<html|<form/i.test(out.body.toString('utf8', 0, 2048))) return { verdict: 'ok', flags: [], brands: [], why: null };
         const a = assess(out.body.toString('utf8'), share);

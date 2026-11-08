@@ -3,10 +3,10 @@
 /**
  * The gate in front of every share: who may open it, and how a visitor's browser proves it on a share host.
  *
- * A share host is another origin (agents--alex.openvibe.website), and openvibe.website is not on the Public Suffix
+ * A share host is another origin (agents--alex.openvibe.link), and openvibe.link is not on the Public Suffix
  * List yet, so the gate keeps every cookie host-only and signs it itself:
  *
- *   1. A visitor without a valid cookie is sent to https://connect.openvibe.website/grant?share=<id>&next=<path>.
+ *   1. A visitor without a valid cookie is sent to https://connect.openvibe.link/grant?share=<id>&next=<path>.
  *   2. There, signed in to OpenVibe (sign-in happens first if needed), the share's policy is checked. A person it lets
  *      in gets a one-time code (60 seconds, used once, bound to that share and host) and goes back to
  *      https://<share host>/__ovc/callback?code=…&next=….

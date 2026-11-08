@@ -2,7 +2,7 @@
 
 /**
  * Page shell. Every page is server-rendered through openvibe-shared/shell and is complete without JavaScript.
- * Connect is the "your machine" half of openvibe.website, so it wears that room's accent (openvibe-shared/rooms
+ * Connect is the "your machine" half of OpenVibe Link, so it wears the Website room's accent (openvibe-shared/rooms
  * `website`, #8EA0FF dark / #4B53C2 light); the navigation's name is `Connect`.
  */
 const crypto = require('crypto');
@@ -24,7 +24,7 @@ const NAV = [
     { label: 'Connect', href: '/', icon: 'fa-plug' },
     { label: 'Sites', href: 'https://openvibe.space', icon: 'fa-globe' },
 ];
-const API_BASE = 'https://connect.openvibe.website';
+const API_BASE = 'https://connect.openvibe.link';
 
 const hashes = new Map();
 function assetVersion(rel) {
@@ -50,9 +50,9 @@ function layout(o) {
     const canonical = o.canonical === undefined ? `${String(config.baseUrl).replace(/\/+$/, '')}${pathNow.split('?')[0]}` : o.canonical;
     const navbar = {
         service: 'connect',
-        // Connect.OpenVibe.Website, the way the navbar names every product on a subdomain (Bench.OpenVibe.Services).
+        // Connect.OpenVibe.Link, the way the navbar names every product on a subdomain (Bench.OpenVibe.Services).
         // With tldLabel 'Connect' the host's own "connect" was added in front: "Connect.OpenVibe.Connect" (11-02).
-        brand: { sub: 'connect', tld: 'website' },
+        brand: { sub: 'connect', tld: 'link' },
         apiBase: NETWORK_URL,
         links: NAV.map((l) => ({ ...l, active: l.href === active || (l.href !== '/' && pathNow.startsWith(`${l.href}/`)) })),
         appBar: [

@@ -77,7 +77,7 @@ const { createGate } = require('../server/edge/gate');
         assert.strictEqual(parseArgs(['--key=ovc_y', '--port=9']).key, 'ovc_y');
         // Used as a module (createClient) with no server, it still goes to production, not to "undefined".
         const { DEFAULT_SERVER } = require('../public/ov-connect');
-        assert.strictEqual(DEFAULT_SERVER, 'wss://connect.openvibe.website/tunnel');
+        assert.strictEqual(DEFAULT_SERVER, 'wss://connect.openvibe.link/tunnel');
         assert.strictEqual(parseArgs([]).server, DEFAULT_SERVER);
     });
 

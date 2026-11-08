@@ -2,21 +2,21 @@
 
 /**
  * /api/v1: OpenVibe.Connect's JSON API, for a person (the connect session cookie, or a Network user token as a
- * Bearer). A session write must come from connect.openvibe.website itself (403 connect.cross_site).
+ * Bearer). A session write must come from connect.openvibe.link itself (403 connect.cross_site).
  *
  *   GET    /shares               your shares (website.share@1 shapes, plus connected)
  *   POST   /shares               { label, port, mode?, named?, expires_in? } → 201 { share, key }   the key is in this answer only
  *   GET    /shares/:id           one of your shares
  *   PATCH  /shares/:id           { mode?, named?, port?, note?, expires_in?, offline_site? }   expires_in: seconds from now
  *                                (600 to 30 days), or null to stay open until you close it; offline_site: where a browser
- *                                goes while the computer is off, one of the sites on the domain (CON-17), '' or null to clear
+ *                                goes while the computer is off, one of your OpenVibe.Space sites (CON-17), '' or null to clear
  *   DELETE /shares/:id           close it (the host answers 410 from then on)
  *   POST   /shares/:id/key       a new key → { share, key }; the connected computer is disconnected
  *   PUT    /shares/:id/node      { node: 'nod_…' } one of your computers serves it, as OpenVibe Link (CON-4): the key
  *                                stops working → { share }; { node: null } lets the computer go → { share, key } (a new key)
  *   GET    /machines             your computers that can serve a share (Network's list of your machines)
  *   GET    /shares/:id/hooks     its webhook addresses (CON-15): each kept webhook waits up to 72 hours for the computer
- *   POST   /shares/:id/hooks     { path, label? } → 201 { hook }: https://connect.openvibe.website/h/<id> → that path
+ *   POST   /shares/:id/hooks     { path, label? } → 201 { hook }: https://connect.openvibe.link/h/<id> → that path
  *   DELETE /shares/:id/hooks/:hook  removes it; webhooks still waiting are dropped
  *   GET    /shares/:id/hooks/:hook/deliveries  the owner's log: what the app answered, and when
  *   GET    /shares/:id/visits    who opened it in the last 7 days

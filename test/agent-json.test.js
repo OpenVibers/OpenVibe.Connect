@@ -9,10 +9,10 @@ const { agentManifest } = require('openvibe-shared/agent-layer');
 
 const m = agentManifest(descriptor);
 assert.strictEqual(m.network, 'OpenVibe');
-assert.strictEqual(m.home, 'https://connect.openvibe.website');
+assert.strictEqual(m.home, 'https://connect.openvibe.link');
 assert.ok(m.purpose && m.purpose.length > 40, 'a purpose');
 assert.ok(/^https:\/\//.test(m.api), 'its API, absolute');
-assert.strictEqual(m.llms, 'https://connect.openvibe.website/llms.txt');
+assert.strictEqual(m.llms, 'https://connect.openvibe.link/llms.txt');
 assert.ok(Array.isArray(m.policy.auth) && m.policy.auth.length, 'how it is called');
 const app = fs.readFileSync(path.join(__dirname, '..', 'server', 'app.js'), 'utf8');
 assert.match(app, /require\('openvibe-shared\/agent-layer'\)\.mount\(app, \{ descriptor: require\('\.\/agent-descriptor'\) \}\);/);
