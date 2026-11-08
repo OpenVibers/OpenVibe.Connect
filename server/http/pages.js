@@ -148,7 +148,7 @@ function createPageRoutes(ctx) {
             }
             const found = await machines.find(req.viewer.token, want);
             if (!found.ok) return showShare(req, res, share, { error: 'Your computers could not be read from OpenVibe just now. Try again in a moment.' }, 503);
-            if (!found.machine) return showShare(req, res, share, { error: 'That is not one of your computers. Pair it with OpenVibe Node first.' }, 404);
+            if (!found.machine) return showShare(req, res, share, { error: 'That is not one of your computers. Pair it with OpenVibe Link first.' }, 404);
             const { share: updated } = await shares.bindNode(owner(req), share.id, found.machine);
             tunnels.close(share.id, 4003, 'now served by one of your computers');
             return res.redirect(303, `/shares/${encodeURIComponent(share.id)}?served=1`);

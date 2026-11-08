@@ -9,7 +9,7 @@
  *   tunnel.open({ onRes, onData, onEnd, onAbort, onPause, onResume }) → stream id
  *   tunnel.send(obj), tunnel.data(id, buf), tunnel.end(id), tunnel.abort(id, code, message), tunnel.release(id)
  *
- * A computer bound to a share as OpenVibe Node (CON-4) says hello with two credentials instead of a key:
+ * A computer bound to a share as OpenVibe Link (CON-4) says hello with two credentials instead of a key:
  * { t: 'hello', share: 'shr_…', node_token: <its Network node token>, tunnel: 'ovt_…' } (server/auth/node-auth.js). Its
  * node token lasts 300 s, so it sends { t: 'reauth', node_token } with a fresh one before then (answered
  * { t: 'reauthed', until }); a tunnel whose token ran out is closed (4000, the computer reconnects), so a computer
@@ -164,7 +164,7 @@ function createTunnels({ shares, config, log = console, onConnect = null, nodeAu
             let share;
             let node = null;
             if (m.key === undefined && (m.node_token !== undefined || m.tunnel !== undefined)) {
-                // A computer as OpenVibe Node (CON-4): its node token and a tunnel token, both checked.
+                // A computer as OpenVibe Link (CON-4): its node token and a tunnel token, both checked.
                 if (!nodeAuth) return refuse(ws, 'unavailable', 'Try again in a moment.');
                 const v = await nodeAuth.verify(m.node_token);
                 if (!v.ok) return v.status === 503 ? refuse(ws, 'unavailable', 'Try again in a moment.') : refuse(ws, 'node_invalid', 'OpenVibe did not take this computer\'s node token. Pair it with OpenVibe again.');

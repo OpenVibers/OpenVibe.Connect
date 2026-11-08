@@ -1,5 +1,5 @@
 -- phase: expand
--- A share served by one of its owner's computers, as OpenVibe Node (CON-4, ADR-057 decision 4). The computer proves
+-- A share served by one of its owner's computers, as OpenVibe Link (CON-4, ADR-057 decision 4). The computer proves
 -- itself with its Network node token (subject node:<node_id>, audience openvibe.website) and a single-use tunnel token
 -- from Connect; the share's connect key stops working while a computer is bound. Null: the connect key, as before.
 ALTER TABLE shares ADD COLUMN IF NOT EXISTS node_id text;      -- nod_… (Network's node principal)
