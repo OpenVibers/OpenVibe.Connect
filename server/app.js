@@ -220,7 +220,11 @@ async function createApp(opts = {}) {
     app.use((req, res, next) => {
         const host = String(req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
         const canonical = new URL(config.baseUrl).hostname;
-        if (['connect.openvibe.link', 'connect.openvibe.website'].includes(host) && host !== canonical) {
+        // Only a browser's page load moves to the canonical control host. Machines keep working on the old name:
+        // webhook senders (/h/), Bearer API calls, MCP clients' token and registration calls and agent discovery do
+        // not follow a 302 (and a 302 turns a POST into a GET), so every other method and those paths answer here.
+        const page = (req.method === 'GET' || req.method === 'HEAD') && !/^\/(?:h|api|\.well-known)(?:\/|$)/.test(req.path);
+        if (['connect.openvibe.link', 'connect.openvibe.website'].includes(host) && host !== canonical && page) {
             return res.redirect(302, `${config.baseUrl}${req.originalUrl}`);
         }
         return next();

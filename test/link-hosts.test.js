@@ -121,6 +121,11 @@ function upgrade(t, host, cookie) {
             const old = await n.share('connect.openvibe.website', '/auth/login?next=%2Fshares');
             assert.equal(old.status, 302);
             assert.equal(old.headers.location, 'https://connect.openvibe.link/auth/login?next=%2Fshares');
+            // Machines are not redirected: a webhook, an API call and agent discovery answer on the old name.
+            for (const [method, path] of [['POST', '/h/hk_missing'], ['GET', '/api/v1/shares'], ['GET', '/.well-known/agent.json'], ['POST', '/oauth/token']]) {
+                const r = await n.share('connect.openvibe.website', path, { method });
+                assert.notEqual(r.status, 302, `${method} ${path} on the old control host must not redirect`);
+            }
             const login = await n.share('connect.openvibe.link', '/auth/login?next=%2Fshares');
             const authorize = new URL(login.headers.location);
             assert.equal(authorize.searchParams.get('redirect_uri'), 'https://connect.openvibe.link/auth/callback');
