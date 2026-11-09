@@ -3,6 +3,9 @@
 OpenVibe Connect lives at `connect.openvibe.link`; the old `.openvibe.website` addresses still work and redirect. See
 [the staged rollout and host commands](docs/link-share-rollout.md) for how the move was deployed.
 
+**Live site:** https://connect.openvibe.link · **API docs:** https://openvibe.services · **For AI:** https://connect.openvibe.link/llms.txt
+**Run it:** `npm ci && npm run dev` (Node 22 or newer) · **Tests:** `npm test`
+
 **Your computer, on the web, privately.** Share one port on your computer at its own HTTPS address,
 `https://<name>--<you>.openvibe.link`, and only the people you pick can open it, signed in with OpenVibe. No router
 settings, no open ports, no app to install: one file and Link.
