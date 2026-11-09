@@ -130,7 +130,7 @@ function home({ viewer, shares = [], connectedIds = new Set(), stats = {}, baseU
         room: 'website',
         hero: {
             title: 'Your computer, on the web, privately',
-            lede: `Share one port on your computer at its own address, like agents--you.${esc(domain)}. Only the people you pick can open it, signed in with OpenVibe. No router settings, no open ports, no app to install: one file and Node.`,
+            lede: `Share one port on your computer at its own address, like agents--you.${esc(domain)}. Only the people you pick can open it, signed in with OpenVibe. No router settings, no open ports, no app to install: one file and Link.`,
             start: signedIn ? { href: '#new', label: 'Make a share' } : { href: '/auth/login?next=%2F%23new', label: 'Sign in to make a share' },
             motif: motif(domain),
         },
