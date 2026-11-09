@@ -12,7 +12,7 @@
  *                                goes while the computer is off, one of your OpenVibe.Space sites (CON-17), '' or null to clear
  *   DELETE /shares/:id           close it (the host answers 410 from then on)
  *   POST   /shares/:id/key       a new key → { share, key }; the connected computer is disconnected
- *   PUT    /shares/:id/node      { node: 'nod_…' } one of your computers serves it, as OpenVibe Link (CON-4): the key
+ *   PUT    /shares/:id/node      { node: 'lnk_…' } one of your computers serves it, as OpenVibe Link (CON-4): the key
  *                                stops working → { share }; { node: null } lets the computer go → { share, key } (a new key)
  *   GET    /machines             your computers that can serve a share (Network's list of your machines)
  *   GET    /shares/:id/hooks     its webhook addresses (CON-15): each kept webhook waits up to 72 hours for the computer
@@ -112,7 +112,7 @@ function createApi(ctx) {
             tunnels.close(share.id, 4003, 'the computer was let go');
             return res.json({ share: shape(updated), key });
         }
-        if (typeof want !== 'string') return fail(res, req, 422, 'share.invalid_node', 'Name one of your computers by its id (nod_…), or null.');
+        if (typeof want !== 'string') return fail(res, req, 422, 'share.invalid_node', 'Name one of your computers by its id (lnk_…), or null.');
         const found = await machines.find(req.principal.token, want);
         if (!found.ok) return fail(res, req, 503, 'machines.unavailable', 'Your computers could not be read from OpenVibe just now. Try again in a moment.');
         if (!found.machine) return fail(res, req, 404, 'share.unknown_node', 'That is not one of your computers. Pair it with OpenVibe Link first.');

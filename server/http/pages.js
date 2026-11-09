@@ -8,7 +8,7 @@
  *   /shares/:id                one share: connected or not, who may open it, who did, the command
  *   POST /shares/:id/policy    who can open it, the port
  *   POST /shares/:id/key       a new key (shown once); the connected computer is disconnected
- *   POST /shares/:id/node      node=nod_… one of your computers serves it (CON-4); node= (empty) lets it go and shows a
+ *   POST /shares/:id/node      node=lnk_… one of your computers serves it (CON-4); node= (empty) lets it go and shows a
  *                              new key once
  *   POST /shares/:id/hooks     path=&label= a webhook address for it (CON-15)
  *   POST /shares/:id/hooks/:hook/remove

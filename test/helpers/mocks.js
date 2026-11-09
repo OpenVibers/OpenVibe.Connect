@@ -136,16 +136,16 @@ async function startNetwork() {
     return {
         url: srv.url, publicPem, privatePem, state: st, requests: st.requests, tokenRequests: st.tokenRequests,
         addUser, userToken, signJwt: (claims) => signJwt(claims, privatePem), issuer: () => issuer,
-        /** A machine `user` owns on Network (a node principal) → { id: 'nod_…', name }. */
+        /** A machine `user` owns on Network (a node principal) → { id: 'lnk_…', name }. */
         addNode(user, { name = 'Desk PC', status = 'active' } = {}) {
-            const n = { id: ids.newId('node'), node_id: `n-${crypto.randomBytes(6).toString('hex')}`, name, owner: user.subject, status, last_seen_at: new Date().toISOString() };
+            const n = { id: ids.newId('link'), node_id: `n-${crypto.randomBytes(6).toString('hex')}`, name, owner: user.subject, status, last_seen_at: new Date().toISOString() };
             st.nodes.push(n);
             return n;
         },
         /** That machine's node token, as Network's /oauth/token would sell it (audience openvibe.website, 300 s). */
-        nodeToken(node, { aud = 'openvibe.website', ttl = 300, iat = null, sub = null } = {}) {
+        linkToken(node, { aud = 'openvibe.website', ttl = 300, iat = null, sub = null } = {}) {
             const now = iat != null ? iat : Math.floor(Date.now() / 1000);
-            return serviceAuth.signServiceToken({ iss: issuer, sub: sub || `node:${node.id}`, actor_type: 'node', aud: [aud], cap: [], iat: now, exp: now + ttl, jti: `tok_${crypto.randomBytes(12).toString('hex')}` }, privatePem);
+            return serviceAuth.signServiceToken({ iss: issuer, sub: sub || `link:${node.id}`, actor_type: 'link', aud: [aud], cap: [], iat: now, exp: now + ttl, jti: `tok_${crypto.randomBytes(12).toString('hex')}` }, privatePem);
         },
         issueCode(user, challenge) { const code = `code_${crypto.randomBytes(8).toString('hex')}`; st.codes.set(code, { user, challenge }); return code; },
         setDown(v) { st.down = v; },

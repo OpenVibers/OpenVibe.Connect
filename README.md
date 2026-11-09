@@ -5,7 +5,7 @@ OpenVibe Connect lives at `connect.openvibe.link`; the old `.openvibe.website` a
 
 **Your computer, on the web, privately.** Share one port on your computer at its own HTTPS address,
 `https://<name>--<you>.openvibe.link`, and only the people you pick can open it, signed in with OpenVibe. No router
-settings, no open ports, no app to install: one file and Node.
+settings, no open ports, no app to install: one file and Link.
 
 Live at **[connect.openvibe.link](https://connect.openvibe.link)**. Connect shares ports through Link; [OpenVibe.Space](https://openvibe.space) builds and hosts sites.
 
@@ -13,7 +13,7 @@ Live at **[connect.openvibe.link](https://connect.openvibe.link)**. Connect shar
 
 1. Sign in at connect.openvibe.link and make a share: a name (`agents`), the port on your computer (`8790`), and
    who can open it.
-2. On your computer (Node 22 or newer):
+2. On your computer (Link 22 or newer):
 
    ```bash
    curl -fsSLO https://connect.openvibe.link/ov-connect.js
@@ -27,16 +27,16 @@ only ever connects to `localhost` on the port you gave it.
 
 ### From a computer with OpenVibe Link (no key)
 
-A computer you added on [openvibe.bot/machines](https://openvibe.bot/machines) runs OpenVibe Link and has its own
+A computer you added on [openvibe.link/machines](https://openvibe.link/machines) runs OpenVibe Link and has its own
 OpenVibe sign-in. On the share's page, pick it under "Or serve it from one of your computers", then on that computer:
 
 ```bash
-openvibe-node share --share shr_…                # serve it now
-sudo openvibe-node share add --share shr_…       # or keep it up with the Link service
+openvibe-link share --share shr_…                # serve it now
+sudo openvibe-link share add --share shr_…       # or keep it up with the Link service
 ```
 
 There is no key to copy. The computer proves itself twice at every connection: with its Network node token (subject
-`node:nod_…`, audience `openvibe.link`, 5 minutes) and with a tunnel token Connect gives it for that one share (60
+`link:lnk_…`, audience `openvibe.link`, 5 minutes) and with a tunnel token Connect gives it for that one share (60
 seconds, one use). It sends a fresh node token before the old one runs out, so a computer removed on OpenVibe stops
 serving within about five minutes. While a computer serves a share, the share's key does not work; "Use a connect key
 instead" lets the computer go and shows a new key once (ADR-057 decision 4, CON-4).
@@ -167,14 +167,14 @@ With a person's OpenVibe token as a Bearer (or the session on connect.openvibe.l
 | `GET /api/v1/shares/:id/visits` | who opened it in the last 7 days |
 | `GET /api/v1/shares/:id/requests` `?after=<seq>` | the last 100 requests through it, newest first (the inspector, below) |
 | `GET /api/v1/machines` | your computers that can serve a share (OpenVibe Link, from Network) |
-| `PUT /api/v1/shares/:id/node` `{ node: 'nod_…' \| null }` | one of your computers serves it (the key stops working) → `{ share }`; `null` lets it go → `{ share, key }` |
+| `PUT /api/v1/shares/:id/node` `{ node: 'lnk_…' \| null }` | one of your computers serves it (the key stops working) → `{ share }`; `null` lets it go → `{ share, key }` |
 
 A computer, with its Network node token (audience `openvibe.link`) as a Bearer:
 
 | Call | What |
 |---|---|
-| `GET /api/v1/node/shares` | the open shares this computer serves: `id`, `host`, `url`, `local_port`, `mode` |
-| `POST /api/v1/node/shares/:id/tunnel-token` | `{ tunnel_token, expires_in: 60, share }`, for one hello on `/tunnel`: `{ t: 'hello', v: 1, share, node_token, tunnel }`, then `{ t: 'reauth', node_token }` before the node token runs out |
+| `GET /api/v1/link/shares` | the open shares this computer serves: `id`, `host`, `url`, `local_port`, `mode` |
+| `POST /api/v1/link/shares/:id/tunnel-token` | `{ tunnel_token, expires_in: 60, share }`, for one hello on `/tunnel`: `{ t: 'hello', v: 1, share, node_token, tunnel }`, then `{ t: 'reauth', node_token }` before the node token runs out |
 
 ## How it works
 

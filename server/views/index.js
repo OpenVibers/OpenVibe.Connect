@@ -229,7 +229,7 @@ function requestRow(q) {
     return `<li class="cn-req is-${tone}" data-seq="${esc(q.seq)}"><span class="cn-req-badge">${esc(badge)}</span><code class="cn-req-line"><b>${esc(q.ws ? 'WS' : q.method)}</b> ${esc(q.path)}</code><span class="cn-req-meta">${esc(meta)}</span><time datetime="${esc(q.at)}">${esc(String(q.at).slice(11, 19))}</time></li>`;
 }
 
-const MACHINES_URL = 'https://openvibe.bot/machines';
+const MACHINES_URL = 'https://openvibe.link/machines';
 
 /**
  * Which computer serves it (CON-4): one of the owner's computers as OpenVibe Link (no key to copy; removing the computer
@@ -237,8 +237,8 @@ const MACHINES_URL = 'https://openvibe.bot/machines';
  */
 function nodeBlock(share, machines, now) {
     if (share.node) {
-        const run = `openvibe-node share --share ${share.id}`;
-        const keep = `sudo openvibe-node share add --share ${share.id}`;
+        const run = `openvibe-link share --share ${share.id}`;
+        const keep = `sudo openvibe-link share add --share ${share.id}`;
         return `<section class="cn-node" aria-labelledby="cn-node-h"><h2 id="cn-node-h">Your computer serves it</h2>
 <p><b>${esc(share.node.name)}</b> serves this share as OpenVibe Link: no key to copy, and removing the computer on OpenVibe stops it within five minutes.</p>
 <ol class="cn-steps">
@@ -251,7 +251,7 @@ function nodeBlock(share, machines, now) {
     const intro = '<p>Pick one of your computers that runs OpenVibe Link and it serves this share with its own sign-in: no key to copy, and removing the computer on OpenVibe stops it. The connect key stops working while a computer serves it.</p>';
     let list;
     if (machines === null) list = '<p class="cn-empty">Your computers could not be read from OpenVibe just now. Reload the page in a moment.</p>';
-    else if (!machines.length) list = `<p class="cn-empty">No computers yet. <a href="${esc(MACHINES_URL)}">Add one on openvibe.bot/machines</a>, then come back here.</p>`;
+    else if (!machines.length) list = `<p class="cn-empty">No computers yet. <a href="${esc(MACHINES_URL)}">Add one on openvibe.link/machines</a>, then come back here.</p>`;
     else {
         list = `<ul class="cn-machines">${machines.map((m) => `<li><span class="cn-machine"><b>${esc(m.name)}</b><small>${m.last_seen_at ? `seen ${esc(ago(m.last_seen_at, now))}` : 'not seen yet'}</small></span>
 <form method="post" action="/shares/${esc(share.id)}/node"><input type="hidden" name="node" value="${esc(m.id)}"><button class="cn-btn cn-btn-quiet" type="submit">${kit.icon('check')} Serve it from this computer</button></form></li>`).join('')}</ul>`;

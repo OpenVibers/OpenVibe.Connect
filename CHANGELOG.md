@@ -26,7 +26,7 @@ computer, on the web, privately.
 - **Shares.** A person makes a share (a name and a local port) and it answers at
   `https://<name>--<user>.openvibe.website`. OpenVibe.Space's site names can never contain "--", so the two never
   meet. Five open shares per person; a closed share keeps its address.
-- **The client.** `public/ov-connect.js`: one file, Node 22+, no dependencies. It opens one outgoing WebSocket to
+- **The client.** `public/ov-connect.js`: one file, Link 22+, no dependencies. It opens one outgoing WebSocket to
   `wss://connect.openvibe.website/tunnel` (through Cloudflare on 443), says hello with the share's key, and carries
   requests to `localhost:<port>`: HTTP with streaming bodies both ways, server-sent events, and WebSocket upgrades as a
   byte pipe. It reconnects after sleep, stops on a wrong key or a closed share, and a newer client takes over.

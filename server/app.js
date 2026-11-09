@@ -6,7 +6,7 @@
  *
  *   <label>--<user>.openvibe.link/*      a share: the gate, then the tunnel (edge/proxy.js), before anything else
  *   /, /shares/*, /grant                  the pages (http/pages.js)
- *   /api/v1/node/*                        a person's computer as OpenVibe Link (http/node-api.js, CON-4)
+ *   /api/v1/link/*                        a person's computer as OpenVibe Link (http/link-api.js, CON-4)
  *   /api/v1/*                             the API (http/api.js)
  *   /ov-connect.js                        the client, served as it is in public/
  *   /auth/*                               Network SSO with PKCE (auth/sso.js)
@@ -29,8 +29,8 @@ const { createSso } = require('./auth/sso');
 const { createPrincipal } = require('./http/principal');
 const settingsLib = require('./settings');
 const { createApi } = require('./http/api');
-const { createNodeApi } = require('./http/node-api');
-const { createNodeAuth } = require('./auth/node-auth');
+const { createLinkApi } = require('./http/link-api');
+const { createLinkAuth } = require('./auth/link-auth');
 const { createMachines } = require('./machines');
 const { createHooks } = require('./hooks');
 const { createApiKeys } = require('./api-keys');
@@ -83,10 +83,10 @@ async function createApp(opts = {}) {
     const shares = createShares(s, { config });
     // "Tell me when it's back" (CON-17): when a share's computer connects, everyone waiting on it gets one notification.
     const notifier = opts.notifier || require('./notify').createNotifier({ config, fetchImpl, log });
-    // A person's computer as OpenVibe Node (CON-4): its node token and a single-use tunnel token; its owner's machines.
-    const nodeAuth = createNodeAuth({ config, keys, now: s.now });
+    // A person's computer as OpenVibe Link (CON-4): its node token and a single-use tunnel token; its owner's machines.
+    const linkAuth = createLinkAuth({ config, keys, now: s.now });
     const machines = opts.machines || createMachines({ config, fetchImpl, log, now: s.now });
-    const tunnels = createTunnels({ shares, config, log, nodeAuth, now: s.now, onConnect: async (share) => {
+    const tunnels = createTunnels({ shares, config, log, linkAuth, now: s.now, onConnect: async (share) => {
         // Webhooks that waited for this computer (CON-15) go at once, oldest first; Events' later retry finds them
         // settled. One that fails waits for that retry.
         ctx.deliverWaiting(share).catch((err) => log.warn('[OpenVibe.Connect] waiting webhooks not handed over:', err.message));
@@ -119,7 +119,7 @@ async function createApp(opts = {}) {
     });
     const hooks = createHooks(s, { config, outbox, now: s.now, log });
 
-    const ctx = { config, s, keys, sso, principal, settings, shares, tunnels, gate, proxy, apiKeys, oauth, notifier, nodeAuth, machines, hooks, outbox, accountData, accountSend, log };
+    const ctx = { config, s, keys, sso, principal, settings, shares, tunnels, gate, proxy, apiKeys, oauth, notifier, linkAuth, machines, hooks, outbox, accountData, accountSend, log };
     ctx.probe = createProbe({ shares, proxy, config, log, now: s.now });
     ctx.probeDelayMs = opts.probeDelayMs != null ? opts.probeDelayMs : 10_000;
 
@@ -295,7 +295,7 @@ async function createApp(opts = {}) {
 
     // ── API ─────────────────────────────────────────────────
     app.use('/api/v1', rateLimit({ windowMs: 60_000, limit: Number(process.env.CONNECT_API_RATE_LIMIT_PER_MIN) || 240, standardHeaders: true, legacyHeaders: false, handler: (req, res) => contracts.http.sendProblem(res, 429, 'rate_limited', { detail: 'too many requests from this address; retry shortly', ctx: req.ov }) }));
-    app.use('/api/v1/node', createNodeApi(ctx));
+    app.use('/api/v1/link', createLinkApi(ctx));
     app.use('/api/v1', createApi(ctx));
     // GET /openapi.json (SEO-3): the API as OpenAPI 3.1. It is not in openvibe-contracts, so the document is read from
     // the routes this app mounts under /api/, with the summaries the API files' header comments give them
@@ -306,7 +306,7 @@ async function createApp(opts = {}) {
         app.get('/openapi.json', require('./http/openapi-routes').openapiRoute(app, {
             title: `${d.name} API`, description: d.purpose, version: require('../package.json').version, baseUrl: site,
             docs: `${site}/llms-full.txt`,
-            files: ['http/api.js', 'http/node-api.js'].map((f) => require('path').join(__dirname, f)),
+            files: ['http/api.js', 'http/link-api.js'].map((f) => require('path').join(__dirname, f)),
         }));
     }
     app.use('/api', (req, res) => contracts.http.sendProblem(res, 404, 'route.not_found', { detail: 'No such API route', ctx: req.ov }));

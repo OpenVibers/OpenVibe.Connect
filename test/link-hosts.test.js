@@ -96,8 +96,8 @@ function upgrade(t, host, cookie) {
         });
         await check('both node audiences work; unrelated audiences do not', async () => {
             const node = t.network.addNode(alex);
-            for (const aud of ['openvibe.website', 'openvibe.link']) assert.equal((await t.ctx.nodeAuth.verify(t.network.nodeToken(node, { aud }))).ok, true);
-            assert.equal((await t.ctx.nodeAuth.verify(t.network.nodeToken(node, { aud: 'openvibe.network' }))).ok, false);
+            for (const aud of ['openvibe.website', 'openvibe.link']) assert.equal((await t.ctx.linkAuth.verify(t.network.linkToken(node, { aud }))).ok, true);
+            assert.equal((await t.ctx.linkAuth.verify(t.network.linkToken(node, { aud: 'openvibe.network' }))).ok, false);
         });
         await check('redirects are opt-in, preserve the path/query, and cover upgrades without forwarding cookies', async () => {
             assert.equal(t.config.shares.redirectLegacy, false);

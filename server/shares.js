@@ -280,7 +280,7 @@ function createShares(s, { config }) {
     }
 
     /**
-     * One of the owner's computers serves the share (CON-4): `machine` is { id: 'nod_…', name }, already checked to be
+     * One of the owner's computers serves the share (CON-4): `machine` is { id: 'lnk_…', name }, already checked to be
      * the owner's and active (the route asks Network with the owner's own token). The connect key is replaced by one
      * nobody is shown, so only that computer, with its node token and a tunnel token, can serve it now. null unbinds
      * and returns a new key (shown once), for the one-file client again.
@@ -306,7 +306,7 @@ function createShares(s, { config }) {
     }
 
     async function createEgress({ node, owner, name, port }) {
-        if (!/^nod_[0-9A-HJKMNP-TV-Z]{26}$/.test(node) || !/^usr_[0-9A-HJKMNP-TV-Z]{26}$/.test(owner) ||
+        if (!/^lnk_[0-9A-HJKMNP-TV-Z]{26}$/.test(node) || !/^usr_[0-9A-HJKMNP-TV-Z]{26}$/.test(owner) ||
             !Number.isInteger(port) || port < 1 || port > 65535) throw new ShareError(422, 'egress.invalid', 'Invalid computer');
         const old = await db.maybe("SELECT * FROM shares WHERE node_id = $1 AND link_egress AND status = 'active'", [node]);
         if (old) {
@@ -325,7 +325,7 @@ function createShares(s, { config }) {
 
     async function createParty({ party, owner, username, node, port }) {
         if (!/^party-[a-f0-9]{8}$/.test(String(party || '')) || !/^usr_[0-9A-HJKMNP-TV-Z]{26}$/.test(String(owner || '')) ||
-            !/^nod_[0-9A-HJKMNP-TV-Z]{26}$/.test(String(node || ''))) throw new ShareError(422, 'party.invalid', 'Invalid party or machine');
+            !/^lnk_[0-9A-HJKMNP-TV-Z]{26}$/.test(String(node || ''))) throw new ShareError(422, 'party.invalid', 'Invalid party or machine');
         const existing = await db.maybe("SELECT * FROM shares WHERE party_slug = $1 AND status = 'active'", [party]);
         if (existing) {
             const current = view(existing);

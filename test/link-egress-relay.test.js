@@ -11,7 +11,7 @@ const { once } = require('events');
     const credential = crypto.randomBytes(32).toString('base64url');
     let identity, checks = 0, allowed = true;
     globalThis.fetch = async (url, options = {}) => {
-        if (String(url).endsWith('/api/v1/node/self/egress/identity')) return new Response(JSON.stringify(identity));
+        if (String(url).endsWith('/api/v1/link/self/egress/identity')) return new Response(JSON.stringify(identity));
         if (String(url).endsWith('/api/v1/link-egress/open')) {
             checks++;
             const b = JSON.parse(options.body);
@@ -35,11 +35,11 @@ const { once } = require('events');
         const owner = t.network.addUser('egressowner');
         const node = t.network.addNode(owner, { name: 'Home PC' });
         identity = { node_id: node.id, owner: owner.subject, name: 'Home PC' };
-        const made = await t.get('/api/v1/node/egress-share', { method: 'POST', bearer: t.network.nodeToken(node),
+        const made = await t.get('/api/v1/link/egress-share', { method: 'POST', bearer: t.network.linkToken(node),
             json: { network_token: 'test-network-token', port: endpoint.address().port } });
         assert.equal(made.status, 200, 'Node creates its dedicated share after Network confirms ownership');
         const share = made.json().share;
-        const ticket = await t.get(`/api/v1/node/shares/${share.id}/tunnel-token`, { method: 'POST', bearer: t.network.nodeToken(node) });
+        const ticket = await t.get(`/api/v1/link/shares/${share.id}/tunnel-token`, { method: 'POST', bearer: t.network.linkToken(node) });
         tunnel = new WebSocket(`ws://127.0.0.1:${t.port}/tunnel`);
         const packet = (kind, id, data = Buffer.alloc(0)) => { const h = Buffer.alloc(5); h[0] = kind; h.writeUInt32BE(id, 1); return Buffer.concat([h, data]); };
         const ready = new Promise((resolve, reject) => {
@@ -64,7 +64,7 @@ const { once } = require('events');
         });
         await once(tunnel, 'open');
         tunnel.send(JSON.stringify({ t: 'hello', v: 1, client: 'egress-test', share: share.id,
-            node_token: t.network.nodeToken(node), tunnel: ticket.json().tunnel_token, port: endpoint.address().port }));
+            link_token: t.network.linkToken(node), tunnel: ticket.json().tunnel_token, port: endpoint.address().port }));
         await ready;
         const connect = () => new WebSocket(`ws://127.0.0.1:${t.port}/__ov_egress`, { headers: { Host: share.host, 'X-OV-Session': 'ses_test', 'X-OV-Egress': credential } });
         const visitor = connect(); await once(visitor, 'open');
