@@ -241,7 +241,7 @@ async function createApp(opts = {}) {
     app.use(sso.middleware());
 
     // ── Sign-in (OAuth2 + PKCE client of OpenVibe.Network) ──
-    app.use('/auth/', rateLimit({ windowMs: 15 * 60_000, limit: 60, standardHeaders: true, legacyHeaders: false }));
+    app.use('/auth/', rateLimit({ windowMs: 15 * 60_000, limit: 60, skip: (req) => req.path === '/me' || req.path === '/navbar-token', standardHeaders: true, legacyHeaders: false }));
     app.use('/auth', sso.routes());
     { const legal = require('openvibe-shared/legal'); app.get(legal.PATHS, legal.handler({ id: 'connect', service: 'connect', host: 'connect.openvibe.link', name: 'OpenVibe Connect', profile: 'ugc' })); }
 
