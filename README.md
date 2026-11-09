@@ -219,6 +219,6 @@ AGPL-3.0-only. The client (`public/ov-connect.js`) is part of this repository un
 
 <!-- versions:start -->
 - openvibe-contracts: v0.373.0
-- openvibe-sdk: v0.123.0
+- openvibe-sdk: v0.125.0
 - openvibe-shared: v4.173.0
 <!-- versions:end -->
