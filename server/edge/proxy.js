@@ -40,7 +40,7 @@ function privateCache(value) {
 const AUDIT_MAX = 64 * 1024;
 const PRM = '/.well-known/oauth-protected-resource';
 
-function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = null, log = console, now = () => Date.now() }) {
+function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = null, log = console, now = () => Date.now(), fetchImpl = globalThis.fetch }) {
     // The last requests through each share, for its owner's page (CON-8 v0; memory only).
     const inspector = require('./inspector').createInspector({ now });
     const domain = config.shares.domains || [config.shares.domain];
@@ -204,6 +204,18 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = nu
 
     /** The share, the person and the tunnel for a request, or an answer already sent. */
     async function admit(req, res, share, parsedPath) {
+        if (share.link_egress) {
+            if (!await require('../link-egress').createEgressAuth({ config, fetchImpl }).open(share, req)) {
+                sendProblem(req, res, 403, 'egress.refused', 'Connection refused', 'This session cannot use that computer.');
+                return null;
+            }
+            const tunnel = tunnels.get(share.id);
+            if (!tunnel || tunnel.busy) {
+                sendProblem(req, res, 503, 'egress.offline', 'Computer unavailable', 'Your computer is offline or busy.');
+                return null;
+            }
+            return { who: { subject: share.owner_subject, username: '' }, tunnel };
+        }
         // An API key (CON-16) passes without signing in; a wrong or revoked one is refused, never sent to sign in.
         const bearer = /^Bearer\s+(ovsk_\S+)$/i.exec(String(req.headers.authorization || ''));
         let who = null;

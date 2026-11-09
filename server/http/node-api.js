@@ -37,6 +37,14 @@ function createNodeApi(ctx) {
 
     r.get('/shares', async (req, res) => res.json({ shares: (await shares.byNode(req.node)).map(brief) }));
 
+    r.post('/egress-share', async (req, res) => {
+        const identity = await require('../link-egress').createEgressAuth({ config }).identity(req.body?.network_token);
+        if (!identity || identity.node_id !== req.node) return fail(res, req, 403, 'egress.owner', 'Network did not confirm this computer');
+        const share = await shares.createEgress({ node: req.node, owner: identity.owner, name: identity.name, port: req.body.port });
+        proxy.forget(share.host);
+        return res.json({ share: brief(share) });
+    });
+
     r.post('/party-shares', async (req, res) => {
         const claim = verify(req.body && req.body.grant, config.partySharedSecret);
         if (!claim || claim.type !== 'create' || claim.node !== req.node)

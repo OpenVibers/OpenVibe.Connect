@@ -154,6 +154,7 @@ function createShares(s, { config }) {
             local_port: Number(row.local_port),
             mode: row.mode,
             party_slug: row.party_slug || null,
+            ...(row.link_egress ? { link_egress: true } : {}),
             named: Array.isArray(row.named) ? row.named : [],
             status: row.status,
             policy_version: Number(row.policy_version),
@@ -304,6 +305,24 @@ function createShares(s, { config }) {
         return rows.map(view);
     }
 
+    async function createEgress({ node, owner, name, port }) {
+        if (!/^nod_[0-9A-HJKMNP-TV-Z]{26}$/.test(node) || !/^usr_[0-9A-HJKMNP-TV-Z]{26}$/.test(owner) ||
+            !Number.isInteger(port) || port < 1 || port > 65535) throw new ShareError(422, 'egress.invalid', 'Invalid computer');
+        const old = await db.maybe("SELECT * FROM shares WHERE node_id = $1 AND link_egress AND status = 'active'", [node]);
+        if (old) {
+            if (old.owner_subject !== owner) throw new ShareError(403, 'egress.owner_mismatch', 'Computer owner changed');
+            await db.exec('UPDATE shares SET local_port = $2, updated_at = now() WHERE id = $1', [old.id, port]);
+            return get(old.id);
+        }
+        const id = s.newId('shr');
+        const handle = node.slice(4).toLowerCase();
+        const hash = sha256(crypto.randomBytes(32).toString('hex'));
+        await db.exec(`INSERT INTO shares(id, owner_subject, owner_username, label, host, local_port, mode,
+            key_prefix, key_hash, node_id, node_name, link_egress) VALUES ($1,$2,$3,'egress',$4,$5,'owner','',$6,$7,$8,true)`,
+            [id, owner, handle, hostFor('egress', handle, domain), port, hash, node, String(name || 'My computer').slice(0, 100)]);
+        return get(id);
+    }
+
     async function createParty({ party, owner, username, node, port }) {
         if (!/^party-[a-f0-9]{8}$/.test(String(party || '')) || !/^usr_[0-9A-HJKMNP-TV-Z]{26}$/.test(String(owner || '')) ||
             !/^nod_[0-9A-HJKMNP-TV-Z]{26}$/.test(String(node || ''))) throw new ShareError(422, 'party.invalid', 'Invalid party or machine');
@@ -448,7 +467,7 @@ function createShares(s, { config }) {
         return false;
     }
 
-    return { create, createParty, partyMembers, closeParty, list, get, byHost, byKey, byNode, bindNode, setPolicy, rotateKey, revoke, expireDue, report, openReports, handleReport, addWaiter, takeWaiters, touchConnected, flushCounters, visits, allows, view, domain };
+    return { create, createEgress, createParty, partyMembers, closeParty, list, get, byHost, byKey, byNode, bindNode, setPolicy, rotateKey, revoke, expireDue, report, openReports, handleReport, addWaiter, takeWaiters, touchConnected, flushCounters, visits, allows, view, domain };
 }
 
 function iso(v) {
