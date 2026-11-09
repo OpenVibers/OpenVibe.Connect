@@ -183,6 +183,16 @@ function createSso({ config, keys, fetchImpl = globalThis.fetch, now = () => Dat
             return res.json({ user: meOf(claims) });
         });
 
+        // The navbar needs a Network access token for the Dock. Keep /auth/me's
+        // profile response token-free; this same-origin answer is never cached.
+        r.get('/navbar-token', async (req, res) => {
+            res.set('Cache-Control', 'private, no-store');
+            const token = sso.extractToken(req);
+            const claims = await sso.verify(token);
+            if (!claims) return res.status(401).json({ error: 'Not signed in' });
+            return res.json({ token, expires_at: claims.exp ? claims.exp * 1000 : null });
+        });
+
         // Sign-out stays a same-site action: another site cannot sign a person out.
         const sameOriginRequest = (req) => {
             const site = String(req.get('sec-fetch-site') || '');

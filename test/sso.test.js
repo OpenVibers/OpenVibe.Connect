@@ -44,6 +44,11 @@ const cookieJar = (res) => res.headers.getSetCookie().map((c) => c.split(';')[0]
         const me = await t.get('/auth/me', { cookie: `ov_token=${at}` });
         assert.strictEqual(me.json().user.username, 'kim');
         assert.ok(!me.text.includes(at), '/auth/me never returns the token');
+        const nav = await t.get('/auth/navbar-token', { cookie: `ov_token=${at}` });
+        assert.strictEqual(nav.status, 200);
+        assert.strictEqual(nav.json().token, at, 'the Dock receives the verified Network token');
+        assert.strictEqual(nav.headers.get('cache-control'), 'private, no-store');
+        assert.strictEqual((await t.get('/auth/navbar-token')).status, 401, 'a guest receives no token');
     });
 
     await check('a wrong state, a verifier that does not match, or no flow cookie starts the sign-in once more', async () => {
