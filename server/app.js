@@ -102,7 +102,7 @@ async function createApp(opts = {}) {
     // API keys for a share (CON-16 v0): a program passes the gate with one; it opens the share's API, never its pages.
     const apiKeys = createApiKeys(s, { now: s.now });
     const oauth = createOAuth(s, { shares, scheme: config.shares.scheme, now: s.now });
-    const proxy = createProxy({ config, shares, tunnels, gate, apiKeys, oauth, log, now: s.now });
+    const proxy = createProxy({ config, shares, tunnels, gate, apiKeys, oauth, log, now: s.now, fetchImpl });
 
     const accountData = accountDataLib.create({ db: s.db, log });
     const accountSend = opts.accountSend || (config.oauth.clientSecret
