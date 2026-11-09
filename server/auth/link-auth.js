@@ -3,7 +3,7 @@
 /**
  * A person's computer, as OpenVibe Link (CON-4, ADR-057 decision 4). Two credentials, both checked:
  *
- *   1. its Network node token: an RS256 service token whose subject is node:<nod_…> (actor_type node), for audience
+ *   1. its Network node token: an RS256 service token whose subject is node:<lnk_…> (actor_type node), for audience
  *      openvibe.link (old binaries: openvibe.website), 300 s. Network issues it to any active machine a person owns
  *      (Network #538);
  *   2. a tunnel token Connect mints for one share and that computer: `ovt_` + 32 random bytes, 60 s, one use. It is
@@ -16,24 +16,24 @@
 const crypto = require('crypto');
 const { serviceAuth } = require('openvibe-contracts');
 
-const NODE_SUB = /^node:(nod_[0-9A-HJKMNP-TV-Z]{26})$/;
-const NODE_ID = /^nod_[0-9A-HJKMNP-TV-Z]{26}$/;
+const LINK_SUB = /^link:(lnk_[0-9A-HJKMNP-TV-Z]{26})$/;
+const LINK_ID = /^lnk_[0-9A-HJKMNP-TV-Z]{26}$/;
 const TUNNEL_RE = /^ovt_[A-Za-z0-9_-]{43}$/;
 const TUNNEL_TTL_MS = 60_000;
 const MAX_TICKETS = 10_000;
 
 const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
 
-function createNodeAuth({ config, keys, now = () => Date.now() }) {
+function createLinkAuth({ config, keys, now = () => Date.now() }) {
     async function verify(token) {
         if (typeof token !== 'string' || token.split('.').length !== 3) return { ok: false, status: 401, code: 'token.malformed', reason: 'not a node token' };
         const publicKey = await keys.pemForToken(token);
         if (!publicKey) return { ok: false, status: 503, code: 'identity.unavailable', reason: 'the Network signing key is not loaded yet' };
-        const results = (config.nodeAudiences || [config.audience]).map((audience) => serviceAuth.verifyServiceToken(token, { publicKey, issuer: config.networkIssuer, audience, now: now() }));
+        const results = (config.linkAudiences || [config.audience]).map((audience) => serviceAuth.verifyServiceToken(token, { publicKey, issuer: config.networkIssuer, audience, now: now() }));
         const r = results.find((result) => result.ok) || results[0];
         if (!r.ok) return { ok: false, status: 401, code: r.code || 'token.invalid', reason: r.reason || 'the token does not verify' };
-        const m = NODE_SUB.exec(String(r.claims.sub || ''));
-        if (!m || r.claims.actor_type !== 'node') return { ok: false, status: 401, code: 'token.not_node', reason: 'this is not a computer\'s node token' };
+        const m = LINK_SUB.exec(String(r.claims.sub || ''));
+        if (!m || r.claims.actor_type !== 'link') return { ok: false, status: 401, code: 'token.not_link', reason: 'this is not a computer\'s Link token' };
         return { ok: true, node: m[1], exp: Number(r.claims.exp) * 1000 };
     }
 
@@ -58,4 +58,4 @@ function createNodeAuth({ config, keys, now = () => Date.now() }) {
     return { verify, mint, redeem, TUNNEL_TTL_MS, pending: () => tickets.size };
 }
 
-module.exports = { createNodeAuth, NODE_ID, NODE_SUB, TUNNEL_TTL_MS };
+module.exports = { createLinkAuth, LINK_ID, LINK_SUB, TUNNEL_TTL_MS };

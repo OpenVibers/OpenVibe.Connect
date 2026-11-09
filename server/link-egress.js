@@ -11,7 +11,7 @@ function createEgressAuth({ config, fetchImpl = globalThis.fetch }) {
         } catch { return null; }
     }
     return {
-        identity: token => network('/api/v1/node/self/egress/identity', null, token),
+        identity: token => network('/api/v1/link/self/egress/identity', null, token),
         async open(share, req) {
             if (req.url !== '/__ov_egress' || req.method !== 'GET' || String(req.headers.upgrade).toLowerCase() !== 'websocket') return false;
             const session = req.headers['x-ov-session'], credential = req.headers['x-ov-egress'];

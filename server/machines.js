@@ -11,7 +11,7 @@
  * is kept 20 seconds (by a hash of their token; at most 500 people). Binding always reads it fresh.
  */
 const crypto = require('crypto');
-const { NODE_ID } = require('./auth/node-auth');
+const { LINK_ID } = require('./auth/link-auth');
 
 const KEEP_MS = 20_000;
 const KEEP_MAX = 500;
@@ -33,7 +33,7 @@ function createMachines({ config, fetchImpl = globalThis.fetch, log = console, n
             if (!res.ok) return { ok: false, reason: `network_${res.status}` };
             const body = await res.json();
             const machines = (Array.isArray(body && body.nodes) ? body.nodes : [])
-                .filter((n) => n && n.status === 'active' && NODE_ID.test(String(n.principal || '')))
+                .filter((n) => n && n.status === 'active' && LINK_ID.test(String(n.principal || '')))
                 .map((n) => ({
                     id: n.principal,
                     name: typeof n.name === 'string' && n.name.trim() ? n.name.trim().slice(0, 80) : 'A computer',

@@ -1,7 +1,7 @@
 # Connect shares on Link: Opus rollout
 
 This PR makes no DNS, Cloudflare or host changes. Leave the four PRs for review. The operator must complete the
-following stages in order; do not release the new Node audience before Network and Connect accept it.
+following stages in order; do not release the new Link audience before Network and Connect accept it.
 
 ## 1. Prepare trust and the dual-host service
 
@@ -81,7 +81,7 @@ Use an existing private share and a new test share to verify over Cloudflare, wi
 * Inspect each gate Set-Cookie: `__Host-ovc`, Secure, HttpOnly, SameSite=Lax, Path=/, **no Domain**. A cookie copied
   to the other alias or another share fails. Local-app cookies also have Domain stripped.
 * GET, POST, SSE, and an authenticated WebSocket work on both hosts; responses bypass Cloudflare cache.
-* The existing Node binary still connects, and the new audience works after deploying Network. MCP sessions
+* The existing Link binary still connects, and the new audience works after deploying Network. MCP sessions
   keep their exact original host audience; changing alias requires authorization for that alias.
 * `https://connect.openvibe.link/auth/health` (following the control redirect) passes and the old control host works.
 
@@ -102,7 +102,7 @@ accepts both audiences, so owner configuration calls continue working.
 
 The old control URL remains usable (HTTP pages redirect; tunnel upgrades remain direct). Both share aliases still
 answer, while API/list/ready responses and `openvibe-link share` advertise Link. Verify sign-in on the new control
-origin; its host-only cookie requires one fresh sign-in. Release Node after this stage.
+origin; its host-only cookie requires one fresh sign-in. Release Link after this stage.
 
 After the new share URL is proved, set `CONNECT_REDIRECT_LEGACY=true` and redeploy Connect. Old share requests
 receive **302**, preserving path and query exactly. Gate codes/cookies are never copied into the new host's session;
@@ -112,5 +112,5 @@ For APIs, 302 can change POST to GET in clients, so update callers to Link befor
 
 Rollback without losing shares: set `CONNECT_REDIRECT_LEGACY=false`, keep both domains, and restore
 `CONNECT_SHARE_DOMAIN=openvibe.website` / the Website BASE_URL and OAuth redirect. Keep the dual-audience server
-versions and additive migration in place (new Node binaries need Link audience; old server code cannot insert the
+versions and additive migration in place (new Link binaries need Link audience; old server code cannot insert the
 new required MCP audience column). No DNS/certificate removal is required.

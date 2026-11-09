@@ -5,7 +5,7 @@
  * both; a visitor's request reaches it; it sends a fresh node token before the old one runs out, and a tunnel whose token
  * ran out is closed. Every refusal: another person's computer, a token for another audience, a spent or late tunnel
  * token, a share it does not serve, the key once a computer serves it.
- *   node test/node-share.test.js
+ *   node test/link-share.test.js
  */
 const assert = require('assert');
 const WebSocket = require('ws');
@@ -15,7 +15,7 @@ const { check, done } = require('./helpers/check');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** A computer's tunnel: hello with its two credentials, and an answer to every request ("from node <path>"). */
-function nodeTunnel(t, hello) {
+function linkTunnel(t, hello) {
     const ws = new WebSocket(`ws://127.0.0.1:${t.port}/tunnel`);
     const frames = [];
     const waiters = [];
@@ -34,7 +34,7 @@ function nodeTunnel(t, hello) {
         waiters.splice(0).forEach((w) => w());
     });
     const closedP = new Promise((resolve) => ws.on('close', (code, reason) => { closed = { code, reason: String(reason) }; resolve(closed); waiters.splice(0).forEach((w) => w()); }));
-    ws.on('open', () => ws.send(JSON.stringify({ t: 'hello', v: 1, client: 'openvibe-node/test', port: 1234, ...hello })));
+    ws.on('open', () => ws.send(JSON.stringify({ t: 'hello', v: 1, client: 'openvibe-link/test', port: 1234, ...hello })));
     async function next(type, ms = 3000) {
         const end = Date.now() + ms;
         for (;;) {
@@ -71,7 +71,7 @@ function nodeTunnel(t, hello) {
     });
 
     await check('binding: only one of the owner\'s active computers; the key stops working at once', async () => {
-        for (const bad of [bobs.id, gone.id, 'nod_01M6FCPA3HCE14MFEM40HQ7VDJ']) {
+        for (const bad of [bobs.id, gone.id, 'lnk_01M6FCPA3HCE14MFEM40HQ7VDJ']) {
             const r = await t.get(`/api/v1/shares/${made.share.id}/node`, { as: alex, method: 'PUT', json: { node: bad } });
             assert.strictEqual(r.status, 404, `${bad}: ${r.text}`);
         }
@@ -87,25 +87,25 @@ function nodeTunnel(t, hello) {
         await sleep(100);
         assert.strictEqual(t.ctx.tunnels.isConnected(made.share.id), false, 'the key\'s computer was disconnected');
         c.stop();
-        const k = nodeTunnel(t, { key: made.key });
+        const k = linkTunnel(t, { key: made.key });
         const closed = await k.closed();
         assert.strictEqual(closed.code, 4002, 'the key no longer opens it');
     });
 
     await check('the computer: its shares and a tunnel token, only with its own node token for openvibe.website', async () => {
-        const list = await t.get('/api/v1/node/shares', { bearer: t.network.nodeToken(desk) });
+        const list = await t.get('/api/v1/link/shares', { bearer: t.network.linkToken(desk) });
         assert.strictEqual(list.status, 200, list.text);
         assert.deepStrictEqual(list.json().shares.map((x) => [x.id, x.local_port]), [[made.share.id, 8790]]);
-        assert.strictEqual((await t.get('/api/v1/node/shares')).status, 401, 'no token');
-        assert.strictEqual((await t.get('/api/v1/node/shares', { bearer: t.network.userToken(alex) })).status, 401, 'a person\'s token is not a computer\'s');
-        assert.strictEqual((await t.get('/api/v1/node/shares', { bearer: t.network.nodeToken(desk, { aud: 'openvibe.bot' }) })).status, 401, 'another audience');
-        assert.strictEqual((await t.get('/api/v1/node/shares', { bearer: t.network.nodeToken(desk, { iat: Math.floor(Date.now() / 1000) - 1000 }) })).status, 401, 'expired');
-        assert.strictEqual((await t.get('/api/v1/node/shares', { bearer: t.network.nodeToken(desk, { sub: 'svc:bot' }) })).status, 401, 'a service is not a computer');
-        const bobList = await t.get('/api/v1/node/shares', { bearer: t.network.nodeToken(bobs) });
+        assert.strictEqual((await t.get('/api/v1/link/shares')).status, 401, 'no token');
+        assert.strictEqual((await t.get('/api/v1/link/shares', { bearer: t.network.userToken(alex) })).status, 401, 'a person\'s token is not a computer\'s');
+        assert.strictEqual((await t.get('/api/v1/link/shares', { bearer: t.network.linkToken(desk, { aud: 'openvibe.bot' }) })).status, 401, 'another audience');
+        assert.strictEqual((await t.get('/api/v1/link/shares', { bearer: t.network.linkToken(desk, { iat: Math.floor(Date.now() / 1000) - 1000 }) })).status, 401, 'expired');
+        assert.strictEqual((await t.get('/api/v1/link/shares', { bearer: t.network.linkToken(desk, { sub: 'svc:bot' }) })).status, 401, 'a service is not a computer');
+        const bobList = await t.get('/api/v1/link/shares', { bearer: t.network.linkToken(bobs) });
         assert.deepStrictEqual(bobList.json().shares, [], 'Bob\'s computer serves nothing of Alex\'s');
-        const no = await t.get(`/api/v1/node/shares/${made.share.id}/tunnel-token`, { method: 'POST', bearer: t.network.nodeToken(bobs) });
+        const no = await t.get(`/api/v1/link/shares/${made.share.id}/tunnel-token`, { method: 'POST', bearer: t.network.linkToken(bobs) });
         assert.strictEqual(no.status, 404, 'another computer gets no tunnel token');
-        const r = await t.get(`/api/v1/node/shares/${made.share.id}/tunnel-token`, { method: 'POST', bearer: t.network.nodeToken(desk) });
+        const r = await t.get(`/api/v1/link/shares/${made.share.id}/tunnel-token`, { method: 'POST', bearer: t.network.linkToken(desk) });
         assert.strictEqual(r.status, 200, r.text);
         ticket = r.json();
         assert.match(ticket.tunnel_token, /^ovt_[A-Za-z0-9_-]{43}$/);
@@ -114,7 +114,7 @@ function nodeTunnel(t, hello) {
     });
 
     await check('hello with both: ready, and a visitor\'s request reaches the computer', async () => {
-        const n = nodeTunnel(t, { share: made.share.id, node_token: t.network.nodeToken(desk), tunnel: ticket.tunnel_token });
+        const n = linkTunnel(t, { share: made.share.id, link_token: t.network.linkToken(desk), tunnel: ticket.tunnel_token });
         const ready = await n.next('ready');
         assert.ok(ready, 'ready');
         assert.strictEqual(ready.node, true);
@@ -126,37 +126,37 @@ function nodeTunnel(t, hello) {
         assert.strictEqual(page.text, 'from node /hello');
         const html = await t.get(`/shares/${made.share.id}`, { as: alex });
         assert.match(html.text, /Your computer serves it/);
-        assert.match(html.text, /openvibe-node share --share shr_/);
+        assert.match(html.text, /openvibe-link share --share shr_/);
         n.ws.close();
         await n.closed();
     });
 
     await check('a tunnel token is spent by any try, and is for one share and one computer', async () => {
-        const fresh = async (node) => (await t.get(`/api/v1/node/shares/${made.share.id}/tunnel-token`, { method: 'POST', bearer: t.network.nodeToken(node) })).json().tunnel_token;
-        const again = nodeTunnel(t, { share: made.share.id, node_token: t.network.nodeToken(desk), tunnel: ticket.tunnel_token });
+        const fresh = async (node) => (await t.get(`/api/v1/link/shares/${made.share.id}/tunnel-token`, { method: 'POST', bearer: t.network.linkToken(node) })).json().tunnel_token;
+        const again = linkTunnel(t, { share: made.share.id, link_token: t.network.linkToken(desk), tunnel: ticket.tunnel_token });
         assert.strictEqual((await again.closed()).code, 4000, 'spent: ask again');
         const tok = await fresh(desk);
-        const wrong = nodeTunnel(t, { share: made.share.id, node_token: t.network.nodeToken(bobs), tunnel: tok });
+        const wrong = linkTunnel(t, { share: made.share.id, link_token: t.network.linkToken(bobs), tunnel: tok });
         assert.strictEqual((await wrong.closed()).code, 4003, 'Bob\'s computer does not serve it');
-        const after = nodeTunnel(t, { share: made.share.id, node_token: t.network.nodeToken(desk), tunnel: tok });
+        const after = linkTunnel(t, { share: made.share.id, link_token: t.network.linkToken(desk), tunnel: tok });
         assert.strictEqual((await after.closed()).code, 4000, 'and the try spent it');
-        const bad = nodeTunnel(t, { share: made.share.id, node_token: t.network.nodeToken(desk, { aud: 'openvibe.network' }), tunnel: await fresh(desk) });
+        const bad = linkTunnel(t, { share: made.share.id, link_token: t.network.linkToken(desk, { aud: 'openvibe.network' }), tunnel: await fresh(desk) });
         assert.strictEqual((await bad.closed()).code, 4002, 'a node token for Network is refused: the computer stops');
-        assert.strictEqual(t.ctx.nodeAuth.pending(), 1, 'the unused one waits; nothing else is kept');
+        assert.strictEqual(t.ctx.linkAuth.pending(), 1, 'the unused one waits; nothing else is kept');
     });
 
     await check('reauth: a fresh token keeps it open; another computer\'s token closes it; a token that ran out closes it', async () => {
-        const tok = (await t.get(`/api/v1/node/shares/${made.share.id}/tunnel-token`, { method: 'POST', bearer: t.network.nodeToken(desk) })).json().tunnel_token;
-        const n = nodeTunnel(t, { share: made.share.id, node_token: t.network.nodeToken(desk, { ttl: 2 }), tunnel: tok });
+        const tok = (await t.get(`/api/v1/link/shares/${made.share.id}/tunnel-token`, { method: 'POST', bearer: t.network.linkToken(desk) })).json().tunnel_token;
+        const n = linkTunnel(t, { share: made.share.id, link_token: t.network.linkToken(desk, { ttl: 2 }), tunnel: tok });
         await n.next('ready');
-        n.ws.send(JSON.stringify({ t: 'reauth', node_token: t.network.nodeToken(desk) }));
+        n.ws.send(JSON.stringify({ t: 'reauth', link_token: t.network.linkToken(desk) }));
         const ok = await n.next('reauthed');
         assert.ok(ok && Date.parse(ok.until) > Date.now() + 200_000, 'until moves on');
-        n.ws.send(JSON.stringify({ t: 'reauth', node_token: t.network.nodeToken(bobs) }));
+        n.ws.send(JSON.stringify({ t: 'reauth', link_token: t.network.linkToken(bobs) }));
         assert.strictEqual((await n.closed()).code, 4002);
 
-        const tok2 = (await t.get(`/api/v1/node/shares/${made.share.id}/tunnel-token`, { method: 'POST', bearer: t.network.nodeToken(desk) })).json().tunnel_token;
-        const m = nodeTunnel(t, { share: made.share.id, node_token: t.network.nodeToken(desk), tunnel: tok2 });
+        const tok2 = (await t.get(`/api/v1/link/shares/${made.share.id}/tunnel-token`, { method: 'POST', bearer: t.network.linkToken(desk) })).json().tunnel_token;
+        const m = linkTunnel(t, { share: made.share.id, link_token: t.network.linkToken(desk), tunnel: tok2 });
         await m.next('ready');
         const live = t.ctx.tunnels.get(made.share.id);
         live.authUntil = Date.now() - 60_000;   // its token ran out a minute ago and no reauth came
@@ -171,7 +171,7 @@ function nodeTunnel(t, hello) {
         assert.ok(key, 'the new key is shown once');
         const s = (await t.get(`/api/v1/shares/${made.share.id}`, { as: alex })).json().share;
         assert.strictEqual(s.node, null);
-        const r = await t.get(`/api/v1/node/shares/${made.share.id}/tunnel-token`, { method: 'POST', bearer: t.network.nodeToken(desk) });
+        const r = await t.get(`/api/v1/link/shares/${made.share.id}/tunnel-token`, { method: 'POST', bearer: t.network.linkToken(desk) });
         assert.strictEqual(r.status, 404);
         const c = t.client({ key: key[1], port: 8790 });
         await c.ready();
@@ -184,7 +184,7 @@ function nodeTunnel(t, hello) {
         assert.strictEqual(r.status, 303, r.text);
         const page = await t.get(r.headers.get('location'), { as: alex });
         assert.match(page.text, /Desk PC serves it now/);
-        assert.match(page.text, /sudo openvibe-node share add --share/);
+        assert.match(page.text, /sudo openvibe-link share add --share/);
         const cross = await t.get(`/shares/${made.share.id}/node`, { as: alex, form: { node: desk.id }, method: 'POST', origin: 'https://evil.example' });
         assert.strictEqual(cross.status, 403, 'another site cannot bind it');
     });

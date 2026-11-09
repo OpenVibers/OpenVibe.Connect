@@ -20,11 +20,11 @@ const sign = (body) => {
 
     await check('only Chat-granted Link machine creates the named party share', async () => {
         const claim = sign({ type: 'create', party: slug, owner: alex.subject, username: 'alex', node: desk.id, port: 18180 });
-        const noToken = await t.get('/api/v1/node/party-shares', { method: 'POST', json: { grant: claim } });
+        const noToken = await t.get('/api/v1/link/party-shares', { method: 'POST', json: { grant: claim } });
         assert.strictEqual(noToken.status, 401);
-        const bad = await t.get('/api/v1/node/party-shares', { method: 'POST', bearer: t.network.nodeToken(desk), json: { grant: claim + 'x' } });
+        const bad = await t.get('/api/v1/link/party-shares', { method: 'POST', bearer: t.network.linkToken(desk), json: { grant: claim + 'x' } });
         assert.strictEqual(bad.status, 403);
-        const made = await t.get('/api/v1/node/party-shares', { method: 'POST', bearer: t.network.nodeToken(desk), json: { grant: claim } });
+        const made = await t.get('/api/v1/link/party-shares', { method: 'POST', bearer: t.network.linkToken(desk), json: { grant: claim } });
         assert.strictEqual(made.status, 201, made.text);
         share = made.json().share;
         assert.strictEqual(share.host, `${slug}--alex.openvibe.link`);
@@ -43,7 +43,7 @@ const sign = (body) => {
         const asBob = sign({ type: 'access', share: share.id, subject: bob.subject, username: 'bob' });
         const opts = { method: 'POST', headers: { origin: `https://${share.host}`, 'content-type': 'application/json' }, body: JSON.stringify({ ticket: asBob }) };
         assert.strictEqual((await t.share(share.host, '/__ovc/party', opts)).status, 403);
-        const synced = await t.get(`/api/v1/node/shares/${share.id}/party-members`, { method: 'PUT', bearer: t.network.nodeToken(desk), json: { members: ['alex', 'bob'] } });
+        const synced = await t.get(`/api/v1/link/shares/${share.id}/party-members`, { method: 'PUT', bearer: t.network.linkToken(desk), json: { members: ['alex', 'bob'] } });
         assert.strictEqual(synced.status, 200, synced.text);
         const entered = await t.share(share.host, '/__ovc/party', opts);
         assert.strictEqual(entered.status, 200, entered.text);
@@ -54,7 +54,7 @@ const sign = (body) => {
     });
 
     await check('the party machine closes its share', async () => {
-        const closed = await t.get(`/api/v1/node/shares/${share.id}/party`, { method: 'DELETE', bearer: t.network.nodeToken(desk) });
+        const closed = await t.get(`/api/v1/link/shares/${share.id}/party`, { method: 'DELETE', bearer: t.network.linkToken(desk) });
         assert.strictEqual(closed.status, 200, closed.text);
         assert.strictEqual((await t.ctx.shares.get(share.id)).status, 'revoked');
         assert.strictEqual((await t.share(share.host, '/__ovc/party')).status, 410);

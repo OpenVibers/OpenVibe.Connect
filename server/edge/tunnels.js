@@ -10,8 +10,8 @@
  *   tunnel.send(obj), tunnel.data(id, buf), tunnel.end(id), tunnel.abort(id, code, message), tunnel.release(id)
  *
  * A computer bound to a share as OpenVibe Link (CON-4) says hello with two credentials instead of a key:
- * { t: 'hello', share: 'shr_…', node_token: <its Network node token>, tunnel: 'ovt_…' } (server/auth/node-auth.js). Its
- * node token lasts 300 s, so it sends { t: 'reauth', node_token } with a fresh one before then (answered
+ * { t: 'hello', share: 'shr_…', link_token: <its Network node token>, tunnel: 'ovt_…' } (server/auth/link-auth.js). Its
+ * node token lasts 300 s, so it sends { t: 'reauth', link_token } with a fresh one before then (answered
  * { t: 'reauthed', until }); a tunnel whose token ran out is closed (4000, the computer reconnects), so a computer
  * removed on Network loses its shares within about five minutes. A refused node token is 4002 and a share this
  * computer does not serve is 4003 (the computer stops both); a spent or late tunnel token is 4000 (it asks again).
@@ -101,7 +101,7 @@ class Tunnel {
 // How long past its node token's expiry a computer's tunnel may stay open while its reauth is on the way.
 const REAUTH_GRACE_MS = 30_000;
 
-function createTunnels({ shares, config, log = console, onConnect = null, nodeAuth = null, now = () => Date.now() }) {
+function createTunnels({ shares, config, log = console, onConnect = null, linkAuth = null, now = () => Date.now() }) {
     const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024, perMessageDeflate: false });
     const live = new Map();   // share id → Tunnel
     const stats = { connects: 0, refused: 0, replaced: 0 };
@@ -163,14 +163,14 @@ function createTunnels({ shares, config, log = console, onConnect = null, nodeAu
             if (m.v !== frames.VERSION) return refuse(ws, 'version', `This server speaks ${frames.PROTOCOL}. Download the client again from ${config.baseUrl}/ov-connect.js`);
             let share;
             let node = null;
-            if (m.key === undefined && (m.node_token !== undefined || m.tunnel !== undefined)) {
+            if (m.key === undefined && (m.link_token !== undefined || m.tunnel !== undefined)) {
                 // A computer as OpenVibe Link (CON-4): its node token and a tunnel token, both checked.
-                if (!nodeAuth) return refuse(ws, 'unavailable', 'Try again in a moment.');
-                const v = await nodeAuth.verify(m.node_token);
+                if (!linkAuth) return refuse(ws, 'unavailable', 'Try again in a moment.');
+                const v = await linkAuth.verify(m.link_token);
                 if (!v.ok) return v.status === 503 ? refuse(ws, 'unavailable', 'Try again in a moment.') : refuse(ws, 'node_invalid', 'OpenVibe did not take this computer\'s node token. Pair it with OpenVibe again.');
                 try { share = await shares.get(typeof m.share === 'string' ? m.share.slice(0, 64) : ''); } catch (err) { log.warn('[OpenVibe.Connect] share lookup failed:', err.message); return refuse(ws, 'unavailable', 'Try again in a moment.'); }
                 // The ticket is spent whatever happens next: one try each.
-                const ticket = share ? nodeAuth.redeem(m.tunnel, share.id, v.node) : false;
+                const ticket = share ? linkAuth.redeem(m.tunnel, share.id, v.node) : false;
                 if (!share || !share.node || share.node.id !== v.node) return refuse(ws, 'node_not_bound', 'This computer does not serve that share. Pick it on the share\'s page.');
                 if (share.status !== 'active') return refuse(ws, 'share_revoked', 'That share is closed.');
                 if (!ticket) return refuse(ws, 'tunnel_token', 'That tunnel token is spent or late. Ask for a new one.');
@@ -198,7 +198,7 @@ function createTunnels({ shares, config, log = console, onConnect = null, nodeAu
 
     /** A fresh node token from a computer's open tunnel: the same computer, still bound to the share. */
     async function reauth(t, m) {
-        const v = nodeAuth ? await nodeAuth.verify(m.node_token) : { ok: false, status: 503 };
+        const v = linkAuth ? await linkAuth.verify(m.link_token) : { ok: false, status: 503 };
         if (!v.ok && v.status === 503) return t.send({ t: 'error', code: 'unavailable', message: 'Try again in a moment.' });
         if (!v.ok || v.node !== t.node) { stats.refused++; return t.shutdown(4002, 'node token refused'); }
         let share = null;

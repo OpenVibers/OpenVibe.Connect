@@ -42,7 +42,7 @@ function load(env = process.env) {
         // The registered service/admin audience stays Website; node audiences are independent.
         audience: env.CONNECT_AUDIENCE || 'openvibe.website',
         // Old binaries still request the Website audience during the transition.
-        nodeAudiences: [...new Set([env.CONNECT_AUDIENCE || 'openvibe.link', 'openvibe.link', 'openvibe.website'])],
+        linkAudiences: [...new Set([env.CONNECT_AUDIENCE || 'openvibe.link', 'openvibe.link', 'openvibe.website'])],
         partySharedSecret: env.CONNECT_PARTY_SHARED_SECRET || '',
         oauth: {
             clientId: env.OV_OAUTH_CLIENT_ID || 'connect',
