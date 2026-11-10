@@ -7,11 +7,11 @@
   "runtime": "node 22, express 4, ws 8, PostgreSQL 18 (openvibe-sdk/db, async)",
   "port": "5240",
   "domain": "connect.openvibe.link",
-  "contracts": "openvibe-contracts v0.373.0",
+  "contracts": "openvibe-contracts v0.384.0",
   "sdk": "openvibe-sdk v0.133.0",
   "shared": "openvibe-shared v4.179.0",
   "packages": [
-    "openvibe-contracts v0.373.0",
+    "openvibe-contracts v0.384.0",
     "openvibe-sdk v0.133.0",
     "openvibe-shared v4.179.0"
   ],
@@ -40,5 +40,5 @@
   "seed": "none",
   "features": [],
   "deployment": "ovhost connect (port 5240, drill 15240), unit openvibe-connect, database ov_connect",
-  "updated": "2026-11-09"
+  "updated": "2026-11-10"
 }
