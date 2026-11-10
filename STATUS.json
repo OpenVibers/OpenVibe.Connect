@@ -8,11 +8,11 @@
   "port": "5240",
   "domain": "connect.openvibe.link",
   "contracts": "openvibe-contracts v0.384.0",
-  "sdk": "openvibe-sdk v0.133.0",
+  "sdk": "openvibe-sdk v0.146.0",
   "shared": "openvibe-shared v4.199.0",
   "packages": [
     "openvibe-contracts v0.384.0",
-    "openvibe-sdk v0.133.0",
+    "openvibe-sdk v0.146.0",
     "openvibe-shared v4.199.0"
   ],
   "summary": "OpenVibe Connect puts one port on a person's computer on the web at its own HTTPS address, behind OpenVibe sign-in. A one-file client (Link 22, no dependencies) opens one outgoing WebSocket through Cloudflare and carries requests to localhost: HTTP with streaming both ways, server-sent events and WebSocket upgrades. Every visitor signs in and must be allowed by the share's policy (only the owner, named people, or anyone signed in); the share host keeps its own host-only signed cookie. Nothing that passes through a share is stored; a webhook addressed to one is sealed and kept for up to 72 hours until its computer takes it.",
