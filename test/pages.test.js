@@ -26,6 +26,8 @@ const { check, done } = require('./helpers/check');
     await check('signed in: your shares and the form, with your own address in it', async () => {
         const r = await t.get('/', { as: kim });
         assert.match(r.text, /No shares yet/);
+        assert.match(r.text, /class="ovk-empty"/, 'the empty shares list draws the kit empty state');
+        assert.match(r.text, /class="ovk-btn[^"]*" href="#new"/, 'the empty state offers the button that opens the form');
         assert.match(r.text, /action="\/shares"/);
         assert.match(r.text, /--kim\.openvibe\.website/);
     });

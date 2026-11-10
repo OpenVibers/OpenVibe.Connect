@@ -119,7 +119,7 @@ function yourShares({ viewer, shares, connectedIds, form, domain }) {
     const closed = shares.filter((s) => s.status !== 'active');
     const list = open.length
         ? `<ul class="cn-shares">${open.map((s) => shareRow(s, { connected: connectedIds.has(s.id) })).join('')}</ul>`
-        : '<p class="cn-empty">No shares yet. Make one below: a name, a port, who can open it.</p>';
+        : kit.empty({ icon: 'link', title: 'No shares yet', text: 'Make one below: a name, a port and who can open it.', action: { href: '#new', label: 'Make a share', icon: 'plus' } });
     const closedList = closed.length ? `<details class="cn-closed"><summary>Closed shares (${closed.length})</summary><ul class="cn-shares">${closed.map((s) => shareRow(s, { connected: false })).join('')}</ul></details>` : '';
     return `<section class="cn-yours" aria-labelledby="cn-yours-h"><h2 id="cn-yours-h">Your shares</h2>${list}${closedList}${createForm({ domain, username: viewer.username, ...(form || {}), staff: viewer.role === 'admin' })}</section>`;
 }
@@ -251,7 +251,7 @@ function nodeBlock(share, machines, now) {
     const intro = '<p>Pick one of your computers that runs OpenVibe Link and it serves this share with its own sign-in: no key to copy, and removing the computer on OpenVibe stops it. The connect key stops working while a computer serves it.</p>';
     let list;
     if (machines === null) list = '<p class="cn-empty">Your computers could not be read from OpenVibe just now. Reload the page in a moment.</p>';
-    else if (!machines.length) list = `<p class="cn-empty">No computers yet. <a href="${esc(MACHINES_URL)}">Add one on openvibe.link/machines</a>, then come back here.</p>`;
+    else if (!machines.length) list = kit.empty({ icon: 'server', title: 'No computers yet', text: 'Add one on openvibe.link/machines, then come back here.', action: { href: MACHINES_URL, label: 'Add a computer', icon: 'plus' } });
     else {
         list = `<ul class="cn-machines">${machines.map((m) => `<li><span class="cn-machine"><b>${esc(m.name)}</b><small>${m.last_seen_at ? `seen ${esc(ago(m.last_seen_at, now))}` : 'not seen yet'}</small></span>
 <form method="post" action="/shares/${esc(share.id)}/node"><input type="hidden" name="node" value="${esc(m.id)}"><button class="cn-btn cn-btn-quiet" type="submit">${kit.icon('check')} Serve it from this computer</button></form></li>`).join('')}</ul>`;
@@ -272,11 +272,11 @@ function hooksBlock(share, hooks, now) {
     const rows = hooks.length ? `<ul class="cn-hooks">${hooks.map((h, i) => `<li><div class="cn-hook-main"><div class="cn-copy"><code id="cn-hook-${i}">${esc(h.url)}</code><button type="button" class="cn-btn cn-btn-quiet" data-ovk-copy="#cn-hook-${i}" hidden>${kit.icon('copy')} Copy</button></div>
 <small>→ localhost:${esc(share.local_port)}${esc(h.local_path)}${h.label ? ` · ${esc(h.label)}` : ''} · ${esc(h.received)} received, ${esc(h.delivered)} handed over${h.waiting ? `, <b>${esc(h.waiting)} waiting for your computer</b>` : ''}${h.last_received_at ? ` · last ${esc(ago(h.last_received_at, now))}` : ''}${h.last_status ? ` · your app answered ${esc(h.last_status)}` : ''}</small>${log(h)}</div>
 <form method="post" action="/shares/${esc(share.id)}/hooks/${esc(h.id)}/remove"><button class="cn-btn cn-btn-quiet" type="submit">${kit.icon('close')} Remove</button></form></li>`).join('')}</ul>`
-        : '<p class="cn-empty">No webhook addresses yet.</p>';
+        : kit.empty({ icon: 'bell', title: 'No webhook addresses yet', text: 'A webhook waits here for your computer, so a sleeping laptop misses nothing.', action: { href: '#new-hook', label: 'Make a webhook address', icon: 'plus' } });
     return `<section class="cn-hooks-sec" aria-labelledby="cn-hooks-h"><h2 id="cn-hooks-h">Webhooks that wait for your computer</h2>
 <p>Give a service (GitHub, Stripe, anything that sends webhooks) an address here instead of your share's. Each webhook is sealed, kept for up to 72 hours, and handed to your app, at the path you pick, as soon as your computer is connected: a laptop that sleeps misses nothing. A share holds at most 1,000 waiting webhooks; the log below says what your app answered. Nobody has to sign in to send one, so check the provider's signature in your app.</p>
 ${rows}
-<form class="cn-form cn-hook-add" method="post" action="/shares/${esc(share.id)}/hooks">
+<form class="cn-form cn-hook-add" id="new-hook" method="post" action="/shares/${esc(share.id)}/hooks">
 <label class="cn-field"><span>Path on your app</span><input name="path" maxlength="500" value="/webhooks" placeholder="/webhooks/github" autocapitalize="none" autocomplete="off" spellcheck="false"></label>
 <label class="cn-field"><span>Name (optional)</span><input name="label" maxlength="80" placeholder="GitHub pushes"></label>
 <button class="cn-btn" type="submit">${kit.icon('plus')} Make a webhook address</button>
@@ -341,11 +341,11 @@ function apiKeysBlock(share, keys, made, now) {
 <small>${esc(k.per_minute)} a minute${k.per_day ? ` · ${esc(Number(k.per_day).toLocaleString('en-US'))} a day` : ''} · made ${esc(ago(k.created_at, now))} · ${k.last_used_at ? `last used ${esc(ago(k.last_used_at, now))}` : 'not used yet'}</small>
 ${keyUseToday(k)}</div>
 <form method="post" action="/shares/${esc(share.id)}/api-keys/${esc(k.id)}/revoke"><button class="cn-btn cn-btn-quiet" type="submit">${kit.icon('close')} Revoke</button></form></li>`).join('')}</ul>`
-        : '<p class="cn-empty">No API keys yet.</p>';
+        : kit.empty({ icon: 'key', title: 'No API keys yet', text: 'A program sends a key to pass the sign-in without a person.', action: { href: '#new-key', label: 'Make an API key', icon: 'plus' } });
     return `<section class="cn-hooks-sec" aria-labelledby="cn-keys-h"><h2 id="cn-keys-h">API keys for programs</h2>
 <p>A program (a script, an editor, another app) sends a key as <code>Authorization: Bearer …</code> and passes without signing in: share a model on your computer, like Ollama or llama.cpp, and call it from anywhere. A key opens what this share answers to programs, never its web pages, and your app never sees the key. Revoke one and it stops at once.</p>
 ${fresh}${rows}
-<form class="cn-form cn-hook-add" method="post" action="/shares/${esc(share.id)}/api-keys">
+<form class="cn-form cn-hook-add" id="new-key" method="post" action="/shares/${esc(share.id)}/api-keys">
 <label class="cn-field"><span>Name</span><input name="name" maxlength="60" required placeholder="laptop script"></label>
 <label class="cn-field"><span>Requests a minute</span><input name="per_minute" type="number" min="1" max="600" value="60" inputmode="numeric"></label>
 <label class="cn-field"><span>Requests a day <small>(optional)</small></span><input name="per_day" type="number" min="1" max="1000000" inputmode="numeric" placeholder="no daily cap"></label>
