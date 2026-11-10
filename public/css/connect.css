@@ -186,7 +186,6 @@
 .cn-req-meta:empty { display: none; }
 .cn-req.is-new { animation: cn-req-in .5s ease-out; }
 @keyframes cn-req-in { from { background: color-mix(in srgb, var(--ovk-accent, #4f7cff) 14%, var(--ovk-panel)); } }
-@media (prefers-reduced-motion: reduce) { .cn-req.is-new { animation: none; } }
 @media (max-width: 520px) { .cn-req { grid-template-columns: auto minmax(0, 1fr); } .cn-req time { grid-column: 2; grid-row: 1; justify-self: end; } .cn-req-line { grid-column: 1 / -1; } }
 .cn-policy { padding: 20px; border-radius: var(--ovk-radius, 16px); border: 1px solid var(--ovk-line); background: var(--ovk-panel); }
 .cn-policy h2 { margin: 0; }
