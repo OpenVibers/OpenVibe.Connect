@@ -21,6 +21,8 @@ const { check, done } = require('./helpers/check');
         assert.match(r.text, /Sign in to make a share/);
         assert.ok(!r.text.includes('action="/shares"'));
         assert.match(r.text, /<meta name="robots" content="index, follow"/);
+        assert.match(r.text, /<script type="application\/ld\+json">[^<]*"@type":"WebSite"/, 'the front door carries the site entity');
+        assert.match(r.text, /"name":"OpenVibe Connect"/);
     });
 
     await check('signed in: your shares and the form, with your own address in it', async () => {
