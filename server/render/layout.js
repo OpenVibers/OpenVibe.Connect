@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const appIcon = require('openvibe-shared/app-icon');
 const shell = require('openvibe-shared/shell');
+const seo = require('openvibe-shared/seo');
 const rooms = require('openvibe-shared/rooms');
 const ovServe = require('openvibe-shared/serve');
 const cache = require('openvibe-shared/cache-policy');
@@ -77,7 +78,7 @@ function layout(o) {
         description: o.description || `${SITE_NAME}: ${TAGLINE} Share one port on your computer at its own address, behind OpenVibe sign-in.`,
         canonical,
         robots: o.robots || (o.index ? 'index, follow' : 'noindex, follow'),
-        jsonLd: (o.jsonLd || []).filter(Boolean),
+        jsonLd: (o.jsonLd || [seo.jsonLd.website({ name: SITE_NAME, url: `${config.baseUrl}/`, description: `${SITE_NAME}: ${TAGLINE}` })]).filter(Boolean),
         home: '/',
         navLinks: NAV,
         navbar,
