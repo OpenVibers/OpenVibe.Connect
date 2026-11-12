@@ -243,7 +243,15 @@ async function createApp(opts = {}) {
     // ── Sign-in (OAuth2 + PKCE client of OpenVibe.Network) ──
     app.use('/auth/', rateLimit({ windowMs: 15 * 60_000, limit: 60, skip: (req) => req.path === '/me' || req.path === '/navbar-token', standardHeaders: true, legacyHeaders: false }));
     app.use('/auth', sso.routes());
-    { const legal = require('openvibe-shared/legal'); app.get(legal.PATHS, legal.handler({ id: 'connect', service: 'connect', host: 'connect.openvibe.link', name: 'OpenVibe Connect', profile: 'ugc' })); }
+    { const legal = require('openvibe-shared/legal');
+    // Shared's legal template starts the navbar without links, so /terms and /privacy showed its fallback
+    // (Home, My Account, Themes) instead of Connect's own pages. Add Connect's list to that init call.
+    const navLinks = JSON.stringify(require('./render/layout').NAV);
+    app.get(legal.PATHS, (req, res, next) => {
+        const send = res.send.bind(res);
+        res.send = (body) => send(String(body).replace('try{OpenVibeNavbar.init({service:', `try{OpenVibeNavbar.init({links:${navLinks},service:`));
+        next();
+    }, legal.handler({ id: 'connect', service: 'connect', host: 'connect.openvibe.link', name: 'OpenVibe Connect', profile: 'ugc' })); }
 
     // ── Webhooks to a share's hooks, and Events' deliveries of them back (CON-15; /internal/ is loopback only) ──
     app.use(createHookRoutes(ctx));

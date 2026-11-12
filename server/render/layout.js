@@ -23,7 +23,7 @@ const TAGLINE = 'Your computer, on the web, privately.';
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
 const NAV = [
     { label: 'Connect', href: '/', icon: 'fa-plug' },
-    { label: 'Sites', href: 'https://openvibe.space', icon: 'fa-globe' },
+    { label: 'Sites on Space', href: 'https://openvibe.space', icon: 'fa-globe' },
 ];
 const API_BASE = 'https://connect.openvibe.link';
 
