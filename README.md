@@ -221,7 +221,7 @@ Environment: `.env.example`. Production: `/etc/openvibe/connect.env`, unit `open
 AGPL-3.0-only. The client (`public/ov-connect.js`) is part of this repository under the same license.
 
 <!-- versions:start -->
-- openvibe-contracts: v0.416.0
+- openvibe-contracts: v0.417.0
 - openvibe-sdk: v0.160.0
 - openvibe-shared: v4.225.0
 <!-- versions:end -->
