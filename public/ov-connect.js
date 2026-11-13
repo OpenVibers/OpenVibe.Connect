@@ -116,7 +116,7 @@ function createClient(opts) {
             const headers = [];
             for (let i = 0; i + 1 < res.rawHeaders.length; i += 2) headers.push([res.rawHeaders[i], res.rawHeaders[i + 1]]);
             sendJson({ t: 'res', id: m.id, status: res.statusCode, headers });
-            if (!opts.quiet) log(`${m.method} ${String(m.path).slice(0, 120)} → ${res.statusCode} (${Date.now() - started} ms)`);
+            if (!opts.quiet) log(`${m.method} ${String(m.path).slice(0, 120)} returned ${res.statusCode} (${Date.now() - started} ms)`);
             res.on('data', (chunk) => {
                 sendData(m.id, chunk);
                 if (congested()) { res.pause(); whenDrained(() => res.resume()); }
@@ -127,7 +127,7 @@ function createClient(opts) {
         req.on('error', (err) => {
             if (!streams.has(m.id)) return;
             const refused = err && (err.code === 'ECONNREFUSED' || err.code === 'EADDRNOTAVAIL');
-            if (!opts.quiet) log(`${m.method} ${String(m.path).slice(0, 120)} → ${refused ? `nothing listening on port ${opts.port}` : err.message}`);
+            if (!opts.quiet) log(`${m.method} ${String(m.path).slice(0, 120)} failed: ${refused ? `nothing listening on port ${opts.port}` : err.message}`);
             abort(m.id, refused ? 'local_refused' : 'local_error', err && err.code);
         });
         req.on('drain', () => sendJson({ t: 'resume', id: m.id }));
@@ -180,7 +180,7 @@ function createClient(opts) {
         if (m.t === 'ready') {
             backoff = 1000;
             readyShare = m.share;
-            log(`Connected. ${m.share.url} → localhost:${opts.port}  (only people you let in can open it)`);
+            log(`Connected. ${m.share.url} now serves localhost:${opts.port}  (only people you let in can open it)`);
             for (const fn of listeners.ready) fn(m.share);
             return;
         }

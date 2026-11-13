@@ -36,7 +36,7 @@ async function start() {
     const { config } = ctx;
 
     const server = app.listen(config.port, config.host, () => {
-        console.log(`[OpenVibe.Connect] ${config.nodeEnv} on http://${config.host}:${config.port} → ${config.baseUrl}, shares at *--*.${config.shares.domain} (db ${ctx.s.db.store})`);
+        console.log(`[OpenVibe.Connect] ${config.nodeEnv} on http://${config.host}:${config.port}, public ${config.baseUrl}, shares at *--*.${config.shares.domain} (db ${ctx.s.db.store})`);
         ctx.keys.ensure().catch(() => {});
     });
     server.keepAliveTimeout = 65_000;

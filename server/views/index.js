@@ -145,8 +145,8 @@ function home({ viewer, shares = [], connectedIds = new Set(), stats = {}, baseU
                 html: terminal([
                     `$ curl -fsSLO ${CLIENT_URL(baseUrl)}`,
                     '$ node ov-connect.js --key ovc_… --port 8080',
-                    `Connected. https://agents--you.${domain} → localhost:8080`,
-                    'GET / → 200 (14 ms)',
+                    `Connected. https://agents--you.${domain} now serves localhost:8080`,
+                    'GET / returned 200 (14 ms)',
                 ]),
                 action: signedIn ? { href: '#new', label: 'Make a share' } : { href: '/auth/login?next=%2F%23new', label: 'Sign in to start' },
             },
@@ -270,7 +270,7 @@ function hooksBlock(share, hooks, now) {
         return `<details class="cn-delivery-log"><summary>Delivery log</summary><ul>${rows.map((d) => `<li><b>${d.status == null ? 'failed' : esc(d.status)}</b> ${esc(d.method)} ${esc(d.path)} · ${esc(ago(d.delivered_at || d.created_at, now))}${d.error ? ` · ${esc(d.error)}` : ''}</li>`).join('')}</ul></details>`;
     };
     const rows = hooks.length ? `<ul class="cn-hooks">${hooks.map((h, i) => `<li><div class="cn-hook-main"><div class="cn-copy"><code id="cn-hook-${i}">${esc(h.url)}</code><button type="button" class="cn-btn cn-btn-quiet" data-ovk-copy="#cn-hook-${i}" hidden>${kit.icon('copy')} Copy</button></div>
-<small>→ localhost:${esc(share.local_port)}${esc(h.local_path)}${h.label ? ` · ${esc(h.label)}` : ''} · ${esc(h.received)} received, ${esc(h.delivered)} handed over${h.waiting ? `, <b>${esc(h.waiting)} waiting for your computer</b>` : ''}${h.last_received_at ? ` · last ${esc(ago(h.last_received_at, now))}` : ''}${h.last_status ? ` · your app answered ${esc(h.last_status)}` : ''}</small>${log(h)}</div>
+<small>delivered to localhost:${esc(share.local_port)}${esc(h.local_path)}${h.label ? ` · ${esc(h.label)}` : ''} · ${esc(h.received)} received, ${esc(h.delivered)} handed over${h.waiting ? `, <b>${esc(h.waiting)} waiting for your computer</b>` : ''}${h.last_received_at ? ` · last ${esc(ago(h.last_received_at, now))}` : ''}${h.last_status ? ` · your app answered ${esc(h.last_status)}` : ''}</small>${log(h)}</div>
 <form method="post" action="/shares/${esc(share.id)}/hooks/${esc(h.id)}/remove"><button class="cn-btn cn-btn-quiet" type="submit">${kit.icon('close')} Remove</button></form></li>`).join('')}</ul>`
         : kit.empty({ icon: 'bell', title: 'No webhook addresses yet', text: 'A webhook waits here for your computer, so a sleeping laptop misses nothing.', action: { href: '#new-hook', label: 'Make a webhook address', icon: 'plus' } });
     return `<section class="cn-hooks-sec" aria-labelledby="cn-hooks-h"><h2 id="cn-hooks-h">Webhooks that wait for your computer</h2>
