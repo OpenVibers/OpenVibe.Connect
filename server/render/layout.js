@@ -22,8 +22,8 @@ const MENU_NAME = 'Connect';
 const TAGLINE = 'Your computer, on the web, privately.';
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
 const NAV = [
-    { label: 'Connect', href: '/', icon: 'fa-plug' },
-    { label: 'Sites on Space', href: 'https://openvibe.space', icon: 'fa-globe' },
+    { label: 'Connect', href: '/', icon: 'plug' },
+    { label: 'Sites on Space', href: 'https://openvibe.space', icon: 'globe' },
 ];
 const API_BASE = 'https://connect.openvibe.link';
 
@@ -57,8 +57,8 @@ function layout(o) {
         apiBase: NETWORK_URL,
         links: NAV.map((l) => ({ ...l, active: l.href === active || (l.href !== '/' && pathNow.startsWith(`${l.href}/`)) })),
         appBar: [
-            { label: 'Shares', href: '/', icon: 'fa-plug' },
-            { label: 'New', href: '/#new', icon: 'fa-plus' },
+            { label: 'Shares', href: '/', icon: 'plug' },
+            { label: 'New', href: '/#new', icon: 'plus' },
         ],
         silentLogin: `${String(config.baseUrl).replace(/\/+$/, '')}/auth/login?silent=1&next={url}`,
         sessionUrl: '/auth/me',
