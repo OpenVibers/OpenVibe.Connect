@@ -1,23 +1,7 @@
 'use strict';
-
-/**
- * express.Router() whose get/post/patch/delete handlers may be async: a rejected promise goes to next(err)
- * (the app's error handler, which logs without request bodies) instead of becoming an unhandled rejection.
- */
+// openvibe-sdk/site (0.174.0) is the one implementation every site shares (the consolidation of 2026-11-16).
+// express.Router() whose async handlers send a rejection to next(err).
 const express = require('express');
+const site = require('openvibe-sdk/site');
 
-function asyncRouter() {
-    const r = express.Router();
-    for (const method of ['get', 'post', 'patch', 'delete', 'put', 'all']) {
-        const orig = r[method].bind(r);
-        r[method] = (path, ...handlers) => orig(path, ...handlers.map((h) => (h.length === 4 ? h : (req, res, next) => {
-            try {
-                const out = h(req, res, next);
-                if (out && typeof out.catch === 'function') out.catch(next);
-            } catch (err) { next(err); }
-        })));
-    }
-    return r;
-}
-
-module.exports = { asyncRouter };
+module.exports = { asyncRouter: () => site.asyncRouter(express.Router()) };
