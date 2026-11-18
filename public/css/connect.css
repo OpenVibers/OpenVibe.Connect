@@ -2,7 +2,7 @@
    accent is the Website room's (--room-accent / --room-fill / --room-on). Phone first; nothing moves on its own. */
 
 .cn-wrap { max-width: 1120px; margin: 0 auto; padding: 0 max(16px, env(safe-area-inset-left, 0px)) 48px; }
-.cn-page { max-width: 760px; padding-top: 20px; display: grid; gap: 22px; }
+.cn-page { max-width: 760px; padding-top: 12px; display: grid; gap: 22px; }
 .cn-narrow { max-width: 560px; }
 .skip { position: absolute; left: 12px; top: -60px; z-index: 1000; padding: 10px 14px; border-radius: 10px; background: var(--room-fill); color: var(--room-on); font-weight: 700; text-decoration: none; }
 .skip:focus { top: 12px; }
@@ -209,4 +209,5 @@
 .cn-report blockquote { margin: 0; padding: 8px 12px; border-left: 3px solid var(--ovk-line); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
 .cn-report-acts { display: flex; flex-wrap: wrap; gap: 8px; }
 .cn-field textarea { box-sizing: border-box; width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--ovk-line); background: var(--ovk-input); color: var(--ovk-text); font: inherit; font-size: 16px; resize: vertical; }
-
+/* Design rule 201 (the owner, 11-14): a page starts within 12 px of the bar, 8 px on a phone. */
+@media (max-width: 640px) { .cn-page { padding-top: 8px; } }
