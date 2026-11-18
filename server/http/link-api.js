@@ -7,6 +7,8 @@
  *
  *   GET  /shares                       the open shares this computer serves → { shares: [{ id, host, url, local_port, mode }] }
  *   POST /shares/:id/tunnel-token      → { tunnel_token, expires_in: 60, share }   for one hello on /tunnel, within 60 s
+ *   POST /previews                     { network_token, port, expires_in? } → 201 { share, expires_at }: an owner-only share
+ *                                      of a folder this computer serves (`openvibe-link preview`), at most a day
  *
  * The tunnel token is in this answer only, and is never logged.
  */
@@ -43,6 +45,20 @@ function createLinkApi(ctx) {
         const share = await shares.createEgress({ node: req.node, owner: identity.owner, name: identity.name, port: req.body.port });
         proxy.forget(share.host);
         return res.json({ share: brief(share) });
+    });
+
+    // A preview (plan §AD.25): Network confirms whose computer this is, as for the egress share; owner-only, short-lived.
+    r.post('/previews', async (req, res) => {
+        const identity = await require('../link-egress').createEgressAuth({ config }).identity(req.body?.network_token);
+        if (!identity || identity.node_id !== req.node) return fail(res, req, 403, 'preview.owner', 'Network did not confirm this computer');
+        try {
+            const share = await shares.createPreview({ node: req.node, owner: identity.owner, name: identity.name, port: req.body.port, expires_in: req.body.expires_in });
+            proxy.forget(share.host);
+            return res.status(201).json({ share: brief(share), expires_at: share.expires_at });
+        } catch (err) {
+            if (err instanceof ShareError) return fail(res, req, err.status, err.code, err.message);
+            throw err;
+        }
     });
 
     r.post('/party-shares', async (req, res) => {

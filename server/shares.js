@@ -323,6 +323,29 @@ function createShares(s, { config }) {
         return get(id);
     }
 
+    /**
+     * A preview (plan §AD.25, `openvibe-link preview <dir>`): an owner-only share of a folder this computer serves, for a
+     * check or a reviewer to open, closed by the expiry sweep after `expires_in` seconds (5 minutes to a day, 2 hours
+     * when not said). At most five open at once per computer; its address is p<6 letters>--<computer>.
+     */
+    async function createPreview({ node, owner, name, port, expires_in = 7200 }) {
+        if (!/^lnk_[0-9A-HJKMNP-TV-Z]{26}$/.test(String(node || '')) || !/^usr_[0-9A-HJKMNP-TV-Z]{26}$/.test(String(owner || '')) ||
+            !Number.isInteger(port) || port < 1 || port > 65535) throw new ShareError(422, 'preview.invalid', 'Invalid computer or port');
+        const ttl = Math.min(24 * 3600, Math.max(300, Number.isFinite(Number(expires_in)) && Number(expires_in) > 0 ? Math.floor(Number(expires_in)) : 7200));
+        const open = Number(await db.value("SELECT count(*) FROM shares WHERE node_id = $1 AND link_preview AND status = 'active'", [node]));
+        if (open >= 5) throw new ShareError(429, 'preview.too_many', 'This computer already has five previews open: close one first.');
+        const handle = node.slice(4).toLowerCase();
+        const label = `p${crypto.randomBytes(4).toString('hex').slice(0, 6)}`;
+        const host = hostFor(label, handle, domain);
+        if (!host) throw new ShareError(422, 'preview.invalid', 'No address for this computer');
+        const id = s.newId('shr');
+        const hash = sha256(crypto.randomBytes(32).toString('hex'));
+        await db.exec(`INSERT INTO shares(id, owner_subject, owner_username, label, host, local_port, mode,
+            key_prefix, key_hash, node_id, node_name, link_preview, expires_at) VALUES ($1,$2,$3,$4,$5,$6,'owner','',$7,$8,$9,true, now() + make_interval(secs => $10))`,
+        [id, owner, handle, label, host, port, hash, node, String(name || 'My computer').slice(0, 100), ttl]);
+        return get(id);
+    }
+
     async function createParty({ party, owner, username, node, port }) {
         if (!/^party-[a-f0-9]{8}$/.test(String(party || '')) || !/^usr_[0-9A-HJKMNP-TV-Z]{26}$/.test(String(owner || '')) ||
             !/^lnk_[0-9A-HJKMNP-TV-Z]{26}$/.test(String(node || ''))) throw new ShareError(422, 'party.invalid', 'Invalid party or machine');
@@ -467,7 +490,7 @@ function createShares(s, { config }) {
         return false;
     }
 
-    return { create, createEgress, createParty, partyMembers, closeParty, list, get, byHost, byKey, byNode, bindNode, setPolicy, rotateKey, revoke, expireDue, report, openReports, handleReport, addWaiter, takeWaiters, touchConnected, flushCounters, visits, allows, view, domain };
+    return { create, createEgress, createPreview, createParty, partyMembers, closeParty, list, get, byHost, byKey, byNode, bindNode, setPolicy, rotateKey, revoke, expireDue, report, openReports, handleReport, addWaiter, takeWaiters, touchConnected, flushCounters, visits, allows, view, domain };
 }
 
 function iso(v) {
