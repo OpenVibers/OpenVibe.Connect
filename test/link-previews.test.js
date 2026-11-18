@@ -55,6 +55,29 @@ const assert = require('assert/strict');
         r = await t.get('/api/v1/link/previews', { method: 'POST', json: { port: 1 } });
         assert.equal(r.status, 401, 'a computer\'s token, nothing else');
 
+        // A room's check opens the owner's preview with Network's delegated token for that owner, naming Connect: read only,
+        // only the owner's own preview, and the token never reaches the computer. Anything else goes to sign-in as before.
+        const { delegatedClaims } = require('openvibe-sdk/auth/delegated');
+        const iss = t.network.issuer();
+        const dtok = (u, o = {}) => t.network.signJwt(delegatedClaims({ user: { id: u.id, subject_id: u.subject, username: u.username }, by: 'svc:network', services: o.services || ['connect'], scope: 'read', issuer: iss }));
+        const viaToken = (token, o = {}) => t.share(share.host, '/', { method: o.method || 'GET', headers: { authorization: `Bearer ${token}`, accept: o.html ? 'text/html' : 'application/json' } });
+        let v = await viaToken(dtok(owner), { html: true });
+        assert.ok(![401, 302, 403, 405].includes(v.status), `the owner's delegated token passes the gate (then waits on the computer): ${v.status} ${v.text && v.text.slice(0, 120)}`);
+        v = await viaToken(dtok(owner), { method: 'POST' });
+        assert.equal(v.status, 405, 'read only');
+        v = await viaToken(dtok(t.network.addUser('notowner')));
+        assert.deepEqual([v.status, v.json().error], [401, 'bad_token'], 'only the preview\'s owner');
+        v = await viaToken(dtok(owner, { services: ['design'] }));
+        assert.deepEqual([v.status, v.json().error], [401, 'bad_token'], 'a token for another service');
+        v = await viaToken(t.network.userToken(owner));
+        assert.deepEqual([v.status, v.json().error], [401, 'bad_token'], 'a full session token is not taken at the edge');
+        // Five previews open do not use up the five shares a person may keep; and an ordinary share takes no delegated
+        // token: sign in as before.
+        const plain = await t.get('/api/v1/shares', { method: 'POST', as: owner, json: { label: 'plainapp', port: 3000, mode: 'owner' } });
+        assert.equal(plain.status, 201, `previews do not count toward the person's shares: ${plain.text}`);
+        v = await t.share(plain.json().share.host, '/', { headers: { authorization: `Bearer ${dtok(owner)}`, accept: 'text/html' } });
+        assert.equal(v.status, 302, 'not a preview: the gate sends it to sign in');
+
         // The expiry sweep closes a preview whose time is up.
         await t.ctx.s.db.exec("UPDATE shares SET expires_at = now() - interval '1 minute' WHERE id = $1", [share.id]);
         await t.ctx.shares.expireDue();
@@ -65,4 +88,4 @@ const assert = require('assert/strict');
         await t.close();
     }
     console.log('link previews: owner-only, confirmed by Network, 5 minutes to a day, five at most, closed when due');
-})().catch((err) => { console.error(err); process.exit(1); });
+})().catch((err) => { process.stderr.write(`${err && err.stack || err}\n`); process.exit(1); });
