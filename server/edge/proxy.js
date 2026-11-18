@@ -40,7 +40,7 @@ function privateCache(value) {
 const AUDIT_MAX = 64 * 1024;
 const PRM = '/.well-known/oauth-protected-resource';
 
-function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = null, log = console, now = () => Date.now(), fetchImpl = globalThis.fetch }) {
+function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = null, delegatedViewer = null, log = console, now = () => Date.now(), fetchImpl = globalThis.fetch }) {
     // The last requests through each share, for its owner's page (CON-8 v0; memory only).
     const inspector = require('./inspector').createInspector({ now });
     const domain = config.shares.domains || [config.shares.domain];
@@ -114,7 +114,7 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = nu
             const name = String(pairs[i]).toLowerCase();
             if (DROP_IN.test(name)) continue;
             // An API key (CON-16) is for the edge alone: the app never sees it, only X-OpenVibe-Subject key:<id>.
-            if ((who.apiKey || who.oauth) && name === 'authorization') continue;
+            if ((who.apiKey || who.oauth || who.delegated) && name === 'authorization') continue;
             if (HOP.has(name) && !(raw && (name === 'connection' || name === 'upgrade'))) continue;
             out.push([name, String(pairs[i + 1])]);
         }
@@ -226,6 +226,13 @@ function createProxy({ config, shares, tunnels, gate, apiKeys = null, oauth = nu
             if (apiKeys.overRate(key)) { visit(share, who, { denied: true }); sendProblem(req, res, 429, 'key_rate_limited', 'Too many requests', `This key allows ${key.per_minute} requests a minute.`, { headers: { 'retry-after': '60' } }); return null; }
             // Its daily quota (CON-16 v1), in UTC days: spent, it opens again at midnight UTC.
             if (await apiKeys.overDay(key)) { visit(share, who, { denied: true }); sendProblem(req, res, 429, 'key_daily_quota', 'Over today\'s quota', `This key allows ${key.per_day} requests a day. It opens again at midnight UTC.`, { headers: { 'retry-after': String(apiKeys.untilTomorrow()) }, json: { per_day: key.per_day } }); return null; }
+        } else if (share.link_preview && delegatedViewer && /^Bearer\s+eyJ/i.test(String(req.headers.authorization || ''))) {
+            // A room's check opening the owner's preview (plan §AD.25): Network's delegated token for the preview's owner,
+            // naming Connect. Read-only, and only that owner's own preview; a wrong one is refused, never sent to sign in.
+            const v = await delegatedViewer(String(req.headers.authorization).replace(/^Bearer\s+/i, '').trim());
+            if (!v || v.subject !== share.owner_subject) { sendProblem(req, res, 401, 'bad_token', 'That token does not open this preview', 'Only its owner, or something acting for them, opens a preview.', { json: { error: 'bad_token' } }); return null; }
+            if (req.method !== 'GET' && req.method !== 'HEAD') { sendProblem(req, res, 405, 'read_only', 'Read only', 'Something acting for the owner may only read a preview.', { json: { error: 'read_only' }, headers: { allow: 'GET, HEAD' } }); return null; }
+            who = { subject: v.subject, username: v.username, delegated: v.by || 'delegated' };
         } else if (oauth && /^Bearer\s+ovat_/i.test(String(req.headers.authorization || ''))) {
             // An MCP client signed in with OpenVibe (CON-16, server/oauth.js): the person who consented, for this share.
             const g = await oauth.check(share, String(req.headers.authorization).replace(/^Bearer\s+/i, '').trim());

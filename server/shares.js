@@ -155,6 +155,7 @@ function createShares(s, { config }) {
             mode: row.mode,
             party_slug: row.party_slug || null,
             ...(row.link_egress ? { link_egress: true } : {}),
+            ...(row.link_preview ? { link_preview: true } : {}),
             named: Array.isArray(row.named) ? row.named : [],
             status: row.status,
             policy_version: Number(row.policy_version),
@@ -215,7 +216,7 @@ function createShares(s, { config }) {
         const note = input.note ? String(input.note).slice(0, 200) : null;
         const ttl = expiresIn(input.expires_in);
 
-        const live = await db.one("SELECT count(*)::int AS n FROM shares WHERE owner_subject = $1 AND status = 'active'", [owner.subject]);
+        const live = await db.one("SELECT count(*)::int AS n FROM shares WHERE owner_subject = $1 AND status = 'active' AND NOT link_preview", [owner.subject]);
         if (live.n >= config.shares.perPerson) throw new ShareError(409, 'share.limit', `You have ${live.n} shares open, the most for now. Close one first.`);
         // A host someone else used stays theirs (a revoked share holds its address, so nobody else can serve on links
         // that still point there). The owner may reuse their own.

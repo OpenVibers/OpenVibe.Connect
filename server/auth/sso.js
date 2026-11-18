@@ -24,6 +24,7 @@ const crypto = require('crypto');
 const express = require('express');
 const cache = require('openvibe-shared/cache-policy');
 const { createSsoClient, COOKIES, parseCookies, sanitizeNext } = require('openvibe-sdk/sso');
+const { isDelegated } = require('openvibe-sdk/auth/delegated');
 
 const ACCESS_COOKIE = 'connect_at';
 const REFRESH_COOKIE = 'connect_rt';
@@ -236,7 +237,23 @@ function createSso({ config, keys, fetchImpl = globalThis.fetch, now = () => Dat
         return r;
     }
 
-    return { middleware, routes, asViewer, tokenGrant: (fields) => sso.tokenGrant(fields), pkcePair, client: sso, checkClient: (o) => sso.checkClient(o) };
+    // Previews (plan §AD.25): a delegated person token that names 'connect' (openvibe-sdk/auth/delegated, minted by Network
+    // for a room's check) opens that person's own preview at the edge, read-only (edge/proxy.js). Nothing else here takes
+    // one: this client is used by the edge alone, and the site's sign-in, pages and API keep the plain client above.
+    const previewSso = createSsoClient({
+        site: 'connect', siteName: 'OpenVibe Connect', baseUrl: config.baseUrl, clientId: config.oauth.clientId,
+        networkUrl: config.networkPublicUrl || config.networkUrl, networkInternalUrl: config.networkInternalUrl || config.networkUrl,
+        issuer: config.networkIssuer || config.networkPublicUrl || config.networkUrl, audience: config.oauth.sessionAudience,
+        fetch: fetchImpl, log, delegated: { service: 'connect' },
+    });
+    /** The person a delegated token acts for, { subject, username, by }, or null (a session token, a wrong one, none). */
+    async function delegatedViewer(token) {
+        const claims = token ? await previewSso.verify(token) : null;
+        if (!claims || !isDelegated(claims) || typeof claims.subject_id !== 'string') return null;
+        return { subject: claims.subject_id, username: typeof claims.username === 'string' ? claims.username.slice(0, 64) : '', by: String(claims.act && claims.act.sub || '') };
+    }
+
+    return { middleware, routes, asViewer, delegatedViewer, tokenGrant: (fields) => sso.tokenGrant(fields), pkcePair, client: sso, checkClient: (o) => sso.checkClient(o) };
 }
 
 module.exports = { createSso, pkcePair, sanitizeNext, ownOrigins, authorizeUrl, ACCESS_COOKIE, REFRESH_COOKIE };
